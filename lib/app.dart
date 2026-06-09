@@ -8,6 +8,7 @@ import 'core/theme/app_theme.dart';
 import 'l10n/app_localizations.dart';
 import 'auth/login_screen.dart';
 import 'dashboard/dashboard_screen.dart';
+import 'calendario/calendario_screen.dart';
 import 'notas/notas_list_screen.dart';
 import 'notas/nota_form_screen.dart';
 import 'tareas/tareas_list_screen.dart';
@@ -42,6 +43,10 @@ class NotebookSeniorApp extends StatelessWidget {
           GoRoute(
             path: '/',
             builder: (context, state) => const DashboardScreen(),
+          ),
+          GoRoute(
+            path: '/calendario',
+            builder: (context, state) => const CalendarioScreen(),
           ),
           GoRoute(
             path: '/notas',
@@ -126,10 +131,11 @@ class _MainShell extends StatelessWidget {
   const _MainShell({required this.child});
 
   int _indiceActual(String location) {
-    if (location.startsWith('/notas')) return 1;
-    if (location.startsWith('/tareas')) return 2;
-    if (location.startsWith('/recordatorios')) return 3;
-    if (location.startsWith('/configuracion')) return 4;
+    if (location.startsWith('/calendario')) return 1;
+    if (location.startsWith('/notas')) return 2;
+    if (location.startsWith('/tareas')) return 3;
+    if (location.startsWith('/recordatorios')) return 4;
+    if (location.startsWith('/configuracion')) return 5;
     return 0;
   }
 
@@ -149,15 +155,18 @@ class _MainShell extends StatelessWidget {
               context.go('/');
               break;
             case 1:
-              context.go('/notas');
+              context.go('/calendario');
               break;
             case 2:
-              context.go('/tareas');
+              context.go('/notas');
               break;
             case 3:
-              context.go('/recordatorios');
+              context.go('/tareas');
               break;
             case 4:
+              context.go('/recordatorios');
+              break;
+            case 5:
               context.go('/configuracion');
               break;
           }
@@ -167,6 +176,11 @@ class _MainShell extends StatelessWidget {
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
             label: l10n.dashboardTitle,
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
+            label: 'Calendario',
           ),
           NavigationDestination(
             icon: Icon(Icons.note_alt_outlined),

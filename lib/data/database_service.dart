@@ -34,4 +34,8 @@ abstract class DatabaseService {
   Future<void> actualizarRecordatorio(Recordatorio recordatorio);
   Future<void> completarRecordatorio(String id);
   Future<void> eliminarRecordatorio(String id);
+
+  Future<List<Nota>> cargarNotasPorRango(DateTime inicio, DateTime fin);
+  Future<List<Tarea>> cargarTareasPorRango(DateTime inicio, DateTime fin);
+  Future<List<Recordatorio>> cargarRecordatoriosPorRango(DateTime inicio, DateTime fin);
 }

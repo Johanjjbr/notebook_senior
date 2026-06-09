@@ -9,6 +9,7 @@ import 'core/providers/auth_provider.dart';
 import 'core/providers/notas_provider.dart';
 import 'core/providers/tareas_provider.dart';
 import 'core/providers/recordatorios_provider.dart';
+import 'core/providers/calendario_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/services/notificacion_service.dart';
 import 'data/database_service.dart';
@@ -46,6 +47,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => NotasProvider(db: db)),
         ChangeNotifierProvider(create: (_) => TareasProvider(db: db)),
         ChangeNotifierProvider(create: (_) => RecordatoriosProvider(db: db)),
+        ChangeNotifierProvider(create: (_) => CalendarioProvider(db: db)),
       ],
       child: const _AppLifecycleHandler(
         child: NotebookSeniorApp(),

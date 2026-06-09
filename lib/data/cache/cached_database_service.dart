@@ -176,4 +176,19 @@ class CachedDatabaseService implements DatabaseService {
   Future<void> eliminarRecordatorio(String id) async {
     await _remote.eliminarRecordatorio(id);
   }
+
+  @override
+  Future<List<Nota>> cargarNotasPorRango(DateTime inicio, DateTime fin) async {
+    return _remote.cargarNotasPorRango(inicio, fin);
+  }
+
+  @override
+  Future<List<Tarea>> cargarTareasPorRango(DateTime inicio, DateTime fin) async {
+    return _remote.cargarTareasPorRango(inicio, fin);
+  }
+
+  @override
+  Future<List<Recordatorio>> cargarRecordatoriosPorRango(DateTime inicio, DateTime fin) async {
+    return _remote.cargarRecordatoriosPorRango(inicio, fin);
+  }
 }

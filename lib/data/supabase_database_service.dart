@@ -221,4 +221,69 @@ class SupabaseDatabaseService implements DatabaseService {
   Future<void> eliminarRecordatorio(String id) async {
     await _supabase.from('recordatorios').delete().eq('id', id);
   }
+
+  @override
+  Future<List<Nota>> cargarNotasPorRango(DateTime inicio, DateTime fin) async {
+    final response = await _supabase
+        .from('notas')
+        .select('*, categorias:nota_categorias(categoria_id, categorias(*))')
+        .eq('user_id', userId)
+        .gte('created_at', inicio.toIso8601String())
+        .lte('created_at', fin.toIso8601String())
+        .order('created_at', ascending: false);
+
+    return (response as List).map((json) {
+      final categorias = (json['categorias'] as List<dynamic>?)
+              ?.map((e) => Categoria.fromJson(
+                  (e as Map<String, dynamic>)['categorias'] as Map<String, dynamic>))
+              .toList() ??
+          [];
+      return Nota.fromJson(json).copyWith(categorias: categorias);
+    }).toList();
+  }
+
+  @override
+  Future<List<Tarea>> cargarTareasPorRango(DateTime inicio, DateTime fin) async {
+    final finInclusive = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
+    final response = await _supabase
+        .from('tareas')
+        .select('*, checklist_items(*), categorias:tarea_categorias(categoria_id, categorias(*))')
+        .eq('user_id', userId)
+        .not('fecha_vencimiento', 'is', null)
+        .gte('fecha_vencimiento', inicio.toIso8601String().split('T').first)
+        .lte('fecha_vencimiento', finInclusive.toIso8601String().split('T').first)
+        .order('fecha_vencimiento', ascending: true);
+
+    return (response as List).map((json) {
+      final checklistItems = (json['checklist_items'] as List<dynamic>?)
+              ?.map((e) => ChecklistItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [];
+      final categorias = (json['categorias'] as List<dynamic>?)
+              ?.map((e) => Categoria.fromJson(
+                  (e as Map<String, dynamic>)['categorias'] as Map<String, dynamic>))
+              .toList() ??
+          [];
+      return Tarea.fromJson(json).copyWith(
+        checklistItems: checklistItems,
+        categorias: categorias,
+      );
+    }).toList();
+  }
+
+  @override
+  Future<List<Recordatorio>> cargarRecordatoriosPorRango(DateTime inicio, DateTime fin) async {
+    final finInclusive = DateTime(fin.year, fin.month, fin.day, 23, 59, 59);
+    final response = await _supabase
+        .from('recordatorios')
+        .select()
+        .eq('user_id', userId)
+        .gte('fecha_hora', inicio.toIso8601String())
+        .lte('fecha_hora', finInclusive.toIso8601String())
+        .order('fecha_hora', ascending: true);
+
+    return (response as List)
+        .map((json) => Recordatorio.fromJson(json as Map<String, dynamic>))
+        .toList();
+  }
 }
