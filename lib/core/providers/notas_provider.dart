@@ -8,8 +8,12 @@ import '../../models/categoria.dart';
 
 class NotasProvider extends ChangeNotifier {
   final DatabaseService _db;
+  final SupabaseClient? _supabase;
   final _uuid = const Uuid();
   static const _pageSize = 20;
+
+  RealtimeChannel? _subscriptionNotas;
+  RealtimeChannel? _subscriptionCategorias;
 
   List<Nota> _notas = [];
   List<Categoria> _categorias = [];
@@ -23,9 +27,45 @@ class NotasProvider extends ChangeNotifier {
   String _sortField = 'updated_at';
   bool _sortAsc = false;
   String? _error;
+  Nota? _ultimaNotaEliminada;
+  List<String>? _ultimasCategoriasEliminadas;
 
   NotasProvider({DatabaseService? db})
-      : _db = db ?? SupabaseDatabaseService(Supabase.instance.client);
+      : _db = db ?? SupabaseDatabaseService(Supabase.instance.client),
+        _supabase = db == null ? Supabase.instance.client : null;
+
+  @override
+  void dispose() {
+    _subscriptionNotas?.unsubscribe();
+    _subscriptionCategorias?.unsubscribe();
+    super.dispose();
+  }
+
+  void _suscribirCambios() {
+    final supabase = _supabase;
+    if (supabase == null) return;
+    _subscriptionNotas?.unsubscribe();
+    _subscriptionNotas = supabase
+        .channel('notas-cambios')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notas',
+          callback: (_) => cargarNotas(),
+        )
+        .subscribe();
+
+    _subscriptionCategorias?.unsubscribe();
+    _subscriptionCategorias = supabase
+        .channel('categorias-cambios')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'categorias',
+          callback: (_) => cargarCategorias(),
+        )
+        .subscribe();
+  }
 
   List<Nota> get notas {
     if (_busqueda.isEmpty) return _notas;
@@ -66,6 +106,7 @@ class NotasProvider extends ChangeNotifier {
     try {
       _notas = await _db.cargarNotas(_sortField, _sortAsc, 0, _pageSize);
       _hasMore = _notas.length >= _pageSize;
+      _suscribirCambios();
     } catch (e) {
       _error = 'Error al cargar notas';
     }
@@ -185,6 +226,8 @@ class NotasProvider extends ChangeNotifier {
   Future<void> eliminarNota(String id) async {
     _eliminando = true;
     _error = null;
+    _ultimaNotaEliminada = _notas.where((n) => n.id == id).firstOrNull;
+    _ultimasCategoriasEliminadas = _ultimaNotaEliminada?.categorias.map((c) => c.id).toList();
     notifyListeners();
 
     try {
@@ -192,10 +235,38 @@ class NotasProvider extends ChangeNotifier {
       await cargarNotas();
     } catch (e) {
       _error = 'Error al eliminar nota';
+      _ultimaNotaEliminada = null;
+      _ultimasCategoriasEliminadas = null;
       notifyListeners();
     }
 
     _eliminando = false;
+    notifyListeners();
+  }
+
+  Future<void> restaurarUltimaNota() async {
+    final nota = _ultimaNotaEliminada;
+    final categoriaIds = _ultimasCategoriasEliminadas;
+    if (nota == null) return;
+    _ultimaNotaEliminada = null;
+    _ultimasCategoriasEliminadas = null;
+
+    _guardando = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _db.crearNota(nota);
+      if (categoriaIds != null && categoriaIds.isNotEmpty) {
+        await _db.insertarNotaCategorias(nota.id, categoriaIds);
+      }
+      await cargarNotas();
+    } catch (e) {
+      _error = 'Error al restaurar nota';
+      notifyListeners();
+    }
+
+    _guardando = false;
     notifyListeners();
   }
 

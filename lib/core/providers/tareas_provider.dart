@@ -11,9 +11,13 @@ import '../services/notificacion_service.dart';
 
 class TareasProvider extends ChangeNotifier {
   final DatabaseService _db;
+  final SupabaseClient? _supabase;
   final _notificacionService = NotificacionService();
   final _uuid = const Uuid();
   static const _pageSize = 20;
+
+  RealtimeChannel? _subscriptionTareas;
+  RealtimeChannel? _subscriptionCategorias;
 
   List<Tarea> _tareas = [];
   List<Categoria> _categorias = [];
@@ -27,12 +31,49 @@ class TareasProvider extends ChangeNotifier {
   String _sortField = 'updated_at';
   bool _sortAsc = false;
   String? _filtroEstado;
+  Tarea? _ultimaTareaEliminada;
+  List<ChecklistItem>? _ultimosChecklistEliminados;
+  List<String>? _ultimasCategoriasTareaEliminadas;
   Prioridad? _filtroPrioridad;
   bool _filtroProgramadas = false;
   String? _error;
 
   TareasProvider({DatabaseService? db})
-      : _db = db ?? SupabaseDatabaseService(Supabase.instance.client);
+      : _db = db ?? SupabaseDatabaseService(Supabase.instance.client),
+        _supabase = db == null ? Supabase.instance.client : null;
+
+  @override
+  void dispose() {
+    _subscriptionTareas?.unsubscribe();
+    _subscriptionCategorias?.unsubscribe();
+    super.dispose();
+  }
+
+  void _suscribirCambios() {
+    final supabase = _supabase;
+    if (supabase == null) return;
+    _subscriptionTareas?.unsubscribe();
+    _subscriptionTareas = supabase
+        .channel('tareas-cambios')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'tareas',
+          callback: (_) => cargarTareas(),
+        )
+        .subscribe();
+
+    _subscriptionCategorias?.unsubscribe();
+    _subscriptionCategorias = supabase
+        .channel('tareas-categorias-cambios')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'categorias',
+          callback: (_) => cargarCategorias(),
+        )
+        .subscribe();
+  }
 
   List<Tarea> get tareas {
     var result = _tareas;
@@ -112,6 +153,7 @@ class TareasProvider extends ChangeNotifier {
     try {
       _tareas = await _db.cargarTareas(_sortField, _sortAsc, 0, _pageSize);
       _hasMore = _tareas.length >= _pageSize;
+      _suscribirCambios();
     } catch (e) {
       _error = 'Error al cargar tareas';
     }
@@ -285,6 +327,10 @@ class TareasProvider extends ChangeNotifier {
   Future<void> eliminarTarea(String id) async {
     _eliminando = true;
     _error = null;
+    _ultimaTareaEliminada = _tareas.where((t) => t.id == id).firstOrNull;
+    _ultimosChecklistEliminados = _ultimaTareaEliminada?.checklistItems;
+    _ultimasCategoriasTareaEliminadas =
+        _ultimaTareaEliminada?.categorias.map((c) => c.id).toList();
     notifyListeners();
 
     try {
@@ -293,10 +339,49 @@ class TareasProvider extends ChangeNotifier {
       await cargarTareas();
     } catch (e) {
       _error = 'Error al eliminar tarea';
+      _ultimaTareaEliminada = null;
+      _ultimosChecklistEliminados = null;
+      _ultimasCategoriasTareaEliminadas = null;
       notifyListeners();
     }
 
     _eliminando = false;
+    notifyListeners();
+  }
+
+  Future<void> restaurarUltimaTarea() async {
+    final tarea = _ultimaTareaEliminada;
+    final checklist = _ultimosChecklistEliminados;
+    final categoriaIds = _ultimasCategoriasTareaEliminadas;
+    if (tarea == null) return;
+    _ultimaTareaEliminada = null;
+    _ultimosChecklistEliminados = null;
+    _ultimasCategoriasTareaEliminadas = null;
+
+    _guardando = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _db.crearTarea(tarea);
+      if (checklist != null && checklist.isNotEmpty) {
+        await _db.insertarChecklistItems(checklist, tarea.id);
+      }
+      if (categoriaIds != null && categoriaIds.isNotEmpty) {
+        await _db.insertarTareaCategorias(tarea.id, categoriaIds);
+      }
+      if (tarea.fechaVencimiento != null) {
+        await _notificacionService.programarTarea(
+          tarea.id, tarea.titulo, tarea.fechaVencimiento!,
+        );
+      }
+      await cargarTareas();
+    } catch (e) {
+      _error = 'Error al restaurar tarea';
+      notifyListeners();
+    }
+
+    _guardando = false;
     notifyListeners();
   }
 

@@ -87,6 +87,9 @@ class _BusquedaScreenState extends State<BusquedaScreen> {
                   const SizedBox(height: 16),
                   Text('Busca en tus notas y tareas',
                       style: TextStyle(color: Colors.grey[600])),
+                  const SizedBox(height: 8),
+                  Text('Escribe arriba para empezar',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13)),
                 ],
               ),
             )

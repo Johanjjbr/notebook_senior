@@ -60,9 +60,17 @@ class _NotasListScreenState extends State<NotasListScreen> {
     );
     if (confirmado != true) return;
     await provider.eliminarNota(id);
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Nota eliminada')),
-    );
+    if (mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Nota eliminada'),
+          action: SnackBarAction(
+            label: 'Deshacer',
+            onPressed: () => context.read<NotasProvider>().restaurarUltimaNota(),
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _toggleArchivar(Nota nota) async {
@@ -141,6 +149,14 @@ class _NotasListScreenState extends State<NotasListScreen> {
                               _mostrarArchivadas ? 'Archiva notas para verlas aquí' : 'Toca + para crear una nota',
                               style: TextStyle(color: Colors.grey[500]),
                             ),
+                            if (!_mostrarArchivadas) ...[
+                              const SizedBox(height: 24),
+                              FilledButton.icon(
+                                onPressed: () => context.go('/notas/nueva'),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Crear nota'),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -178,7 +194,50 @@ class _NotasListScreenState extends State<NotasListScreen> {
                                     ? Colors.black87
                                     : Colors.white;
                                 final mutedColor = textColor.withAlpha(180);
-                                return Card(
+                                return Dismissible(
+                                  key: ValueKey(nota.id),
+                                  direction: DismissDirection.horizontal,
+                                  background: Container(
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.only(left: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.archive, color: Colors.white),
+                                  ),
+                                  secondaryBackground: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.delete, color: Colors.white),
+                                  ),
+                                  confirmDismiss: (direction) async {
+                                    if (direction == DismissDirection.endToStart) {
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('Eliminar nota'),
+                                          content: const Text('¿Estás seguro?'),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm == true) {
+                                        await _eliminarNota(nota.id);
+                                        return true;
+                                      }
+                                      return false;
+                                    }
+                                    await _toggleArchivar(nota);
+                                    return true;
+                                  },
+                                  child: Card(
                                   color: bgColor,
                                   child: Padding(
                                     padding: const EdgeInsets.all(12),
@@ -273,12 +332,14 @@ class _NotasListScreenState extends State<NotasListScreen> {
                                       ],
                                     ),
                                   ),
+                                ),
                                 );
                               },
                             ),
                           );
                         },
                       ),
+                    ),
           if (provider.cargandoMas)
             Positioned(
               left: 0,

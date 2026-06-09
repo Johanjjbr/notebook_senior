@@ -216,6 +216,15 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                           Text('Sin recordatorios',
                               style: theme.textTheme.titleLarge?.copyWith(
                                   color: Colors.grey[600])),
+                          const SizedBox(height: 8),
+                          Text('Programa recordatorios para no olvidar nada',
+                              style: TextStyle(color: Colors.grey[500])),
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            onPressed: () => _mostrarDialogo(),
+                            icon: const Icon(Icons.add_alarm),
+                            label: const Text('Crear recordatorio'),
+                          ),
                         ],
                       ),
                     ),
@@ -235,7 +244,171 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                                 )),
                           ),
                           ...provider.proximos.map((r) =>
-                              _RecordatorioTile(
+                              Dismissible(
+                                key: ValueKey(r.id),
+                                direction: DismissDirection.horizontal,
+                                background: Container(
+                                  alignment: Alignment.centerLeft,
+                                  padding: const EdgeInsets.only(left: 20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(Icons.check, color: Colors.white),
+                                ),
+                                secondaryBackground: Container(
+                                  alignment: Alignment.centerRight,
+                                  padding: const EdgeInsets.only(right: 20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(Icons.delete, color: Colors.white),
+                                ),
+                                confirmDismiss: (direction) async {
+                                  if (direction == DismissDirection.endToStart) {
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Eliminar recordatorio'),
+                                        content: const Text('¿Estás seguro?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      await provider.eliminarRecordatorio(r.id);
+                                      if (context.mounted) {
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: const Text('Recordatorio eliminado'),
+                                            action: SnackBarAction(
+                                              label: 'Deshacer',
+                                              onPressed: () => context
+                                                  .read<RecordatoriosProvider>()
+                                                  .restaurarUltimoRecordatorio(),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                    return confirm == true;
+                                  }
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  await provider.completarRecordatorio(r.id);
+                                  if (context.mounted) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(content: Text('Recordatorio completado')),
+                                    );
+                                  }
+                                  return true;
+                                },
+                                child: _RecordatorioTile(
+                                  recordatorio: r,
+                                  onEditar: () => _mostrarDialogo(existente: r),
+                                  onCompletar: () async {
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    await provider.completarRecordatorio(r.id);
+                                    if (context.mounted) {
+                                      messenger.showSnackBar(
+                                        const SnackBar(content: Text('Recordatorio completado')),
+                                      );
+                                    }
+                                  },
+                                  onEliminar: () async {
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    await provider.eliminarRecordatorio(r.id);
+                                    if (context.mounted) {
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: const Text('Recordatorio eliminado'),
+                                          action: SnackBarAction(
+                                            label: 'Deshacer',
+                                            onPressed: () => context
+                                                .read<RecordatoriosProvider>()
+                                                .restaurarUltimoRecordatorio(),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                ),
+                              )),
+                          const SizedBox(height: 16),
+                        ],
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text('Todos',
+                              style: theme.textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                        ),
+                        ...provider.recordatorios.map((r) =>
+                            Dismissible(
+                              key: ValueKey(r.id),
+                              direction: DismissDirection.horizontal,
+                              background: Container(
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.only(left: 20),
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.check, color: Colors.white),
+                              ),
+                              secondaryBackground: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.delete, color: Colors.white),
+                              ),
+                              confirmDismiss: (direction) async {
+                                  if (direction == DismissDirection.endToStart) {
+                                    final messenger = ScaffoldMessenger.of(context);
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Eliminar recordatorio'),
+                                        content: const Text('¿Estás seguro?'),
+                                        actions: [
+                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      await provider.eliminarRecordatorio(r.id);
+                                      if (context.mounted) {
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: const Text('Recordatorio eliminado'),
+                                            action: SnackBarAction(
+                                              label: 'Deshacer',
+                                              onPressed: () => context
+                                                  .read<RecordatoriosProvider>()
+                                                  .restaurarUltimoRecordatorio(),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                    return confirm == true;
+                                  }
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  await provider.completarRecordatorio(r.id);
+                                  if (context.mounted) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(content: Text('Recordatorio completado')),
+                                    );
+                                  }
+                                  return true;
+                                },
+                                child: _RecordatorioTile(
                                 recordatorio: r,
                                 onEditar: () => _mostrarDialogo(existente: r),
                                 onCompletar: () async {
@@ -248,37 +421,21 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                                 onEliminar: () async {
                                   final messenger = ScaffoldMessenger.of(context);
                                   await provider.eliminarRecordatorio(r.id);
-                                  messenger.showSnackBar(
-                                    const SnackBar(content: Text('Recordatorio eliminado')),
-                                  );
+                                  if (context.mounted) {
+                                    messenger.showSnackBar(
+                                      SnackBar(
+                                        content: const Text('Recordatorio eliminado'),
+                                        action: SnackBarAction(
+                                          label: 'Deshacer',
+                                          onPressed: () => context
+                                              .read<RecordatoriosProvider>()
+                                              .restaurarUltimoRecordatorio(),
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 },
-                              )),
-                          const SizedBox(height: 16),
-                        ],
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text('Todos',
-                              style: theme.textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold)),
-                        ),
-                        ...provider.recordatorios.map((r) =>
-                            _RecordatorioTile(
-                              recordatorio: r,
-                              onEditar: () => _mostrarDialogo(existente: r),
-                              onCompletar: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                await provider.completarRecordatorio(r.id);
-                                messenger.showSnackBar(
-                                  const SnackBar(content: Text('Recordatorio completado')),
-                                );
-                              },
-                              onEliminar: () async {
-                                final messenger = ScaffoldMessenger.of(context);
-                                await provider.eliminarRecordatorio(r.id);
-                                messenger.showSnackBar(
-                                  const SnackBar(content: Text('Recordatorio eliminado')),
-                                );
-                              },
+                              ),
                             )),
                       ],
                     ),

@@ -8,9 +8,12 @@ import '../services/notificacion_service.dart';
 
 class RecordatoriosProvider extends ChangeNotifier {
   final DatabaseService _db;
+  final SupabaseClient? _supabase;
   final _uuid = const Uuid();
   final _notificacionService = NotificacionService();
   static const _pageSize = 20;
+
+  RealtimeChannel? _subscriptionRecordatorios;
 
   List<Recordatorio> _recordatorios = [];
   bool _cargandoLista = false;
@@ -20,9 +23,32 @@ class RecordatoriosProvider extends ChangeNotifier {
   bool _hasMore = true;
   int _page = 0;
   String? _error;
+  Recordatorio? _ultimoRecordatorioEliminado;
 
   RecordatoriosProvider({DatabaseService? db})
-      : _db = db ?? SupabaseDatabaseService(Supabase.instance.client);
+      : _db = db ?? SupabaseDatabaseService(Supabase.instance.client),
+        _supabase = db == null ? Supabase.instance.client : null;
+
+  @override
+  void dispose() {
+    _subscriptionRecordatorios?.unsubscribe();
+    super.dispose();
+  }
+
+  void _suscribirCambios() {
+    final supabase = _supabase;
+    if (supabase == null) return;
+    _subscriptionRecordatorios?.unsubscribe();
+    _subscriptionRecordatorios = supabase
+        .channel('recordatorios-cambios')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'recordatorios',
+          callback: (_) => cargarRecordatorios(),
+        )
+        .subscribe();
+  }
 
   List<Recordatorio> get recordatorios => _recordatorios;
   List<Recordatorio> get proximos {
@@ -51,6 +77,7 @@ class RecordatoriosProvider extends ChangeNotifier {
     try {
       _recordatorios = await _db.cargarRecordatorios(0, _pageSize);
       _hasMore = _recordatorios.length >= _pageSize;
+      _suscribirCambios();
     } catch (e) {
       _error = 'Error al cargar recordatorios';
     }
@@ -139,6 +166,8 @@ class RecordatoriosProvider extends ChangeNotifier {
   Future<void> eliminarRecordatorio(String id) async {
     _eliminando = true;
     _error = null;
+    _ultimoRecordatorioEliminado =
+        _recordatorios.where((r) => r.id == id).firstOrNull;
     notifyListeners();
 
     try {
@@ -147,10 +176,36 @@ class RecordatoriosProvider extends ChangeNotifier {
       await cargarRecordatorios();
     } catch (e) {
       _error = 'Error al eliminar recordatorio';
+      _ultimoRecordatorioEliminado = null;
       notifyListeners();
     }
 
     _eliminando = false;
+    notifyListeners();
+  }
+
+  Future<void> restaurarUltimoRecordatorio() async {
+    final recordatorio = _ultimoRecordatorioEliminado;
+    if (recordatorio == null) return;
+    _ultimoRecordatorioEliminado = null;
+
+    _guardando = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _db.crearRecordatorio(recordatorio);
+      if (!recordatorio.completado &&
+          recordatorio.fechaHora.isAfter(DateTime.now())) {
+        await _notificacionService.programarRecordatorio(recordatorio);
+      }
+      await cargarRecordatorios();
+    } catch (e) {
+      _error = 'Error al restaurar recordatorio';
+      notifyListeners();
+    }
+
+    _guardando = false;
     notifyListeners();
   }
 

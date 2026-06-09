@@ -47,25 +47,33 @@ class _TareasListScreenState extends State<TareasListScreen> {
     }
   }
 
-  Future<void> _eliminarTarea(String id) async {
+  Future<void> _eliminarTarea(String id, {bool showConfirm = true}) async {
     final messenger = ScaffoldMessenger.of(context);
     final provider = context.read<TareasProvider>();
-    final confirmado = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar tarea'),
-        content: const Text('¿Estás seguro? Esta acción no se puede deshacer.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
-        ],
-      ),
-    );
-    if (confirmado != true) return;
+    if (showConfirm) {
+      final confirmado = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Eliminar tarea'),
+          content: const Text('¿Estás seguro? Esta acción no se puede deshacer.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+          ],
+        ),
+      );
+      if (confirmado != true || !context.mounted) return;
+    }
     await provider.eliminarTarea(id);
-    if (mounted) {
+    if (context.mounted) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Tarea eliminada')),
+        SnackBar(
+          content: const Text('Tarea eliminada'),
+          action: SnackBarAction(
+            label: 'Deshacer',
+            onPressed: () => context.read<TareasProvider>().restaurarUltimaTarea(),
+          ),
+        ),
       );
     }
   }
@@ -129,6 +137,12 @@ class _TareasListScreenState extends State<TareasListScreen> {
                                   const SizedBox(height: 8),
                                   Text('Toca + para crear una tarea',
                                       style: TextStyle(color: Colors.grey[500])),
+                                  const SizedBox(height: 24),
+                                  FilledButton.icon(
+                                    onPressed: () => context.go('/tareas/nueva'),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Crear tarea'),
+                                  ),
                                 ],
                               ),
                             ),
@@ -139,14 +153,58 @@ class _TareasListScreenState extends State<TareasListScreen> {
                               itemCount: provider.tareas.length,
                               itemBuilder: (context, index) {
                                 final tarea = provider.tareas[index];
-                                return _TareaTile(
-                                  tarea: tarea,
-                                  onToggle: () => provider.toggleCompletada(
-                                    tarea.id,
-                                    !tarea.completada,
+                                return Dismissible(
+                                  key: ValueKey(tarea.id),
+                                  direction: DismissDirection.horizontal,
+                                  background: Container(
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.only(left: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.check_circle, color: Colors.white),
                                   ),
-                                  onTap: () => context.go('/tareas/editar/${tarea.id}'),
-                                  onEliminar: () => _eliminarTarea(tarea.id),
+                                  secondaryBackground: Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 20),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.delete, color: Colors.white),
+                                  ),
+                                  confirmDismiss: (direction) async {
+                                    if (direction == DismissDirection.endToStart) {
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          title: const Text('Eliminar tarea'),
+                                          content: const Text('¿Estás seguro?'),
+                                          actions: [
+                                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+                                          ],
+                                        ),
+                                      );
+                                      if (confirm == true) {
+                                        await _eliminarTarea(tarea.id, showConfirm: false);
+                                        return true;
+                                      }
+                                      return false;
+                                    }
+                                    provider.toggleCompletada(tarea.id, !tarea.completada);
+                                    return true;
+                                  },
+                                  child: _TareaTile(
+                                    tarea: tarea,
+                                    onToggle: () => provider.toggleCompletada(
+                                      tarea.id,
+                                      !tarea.completada,
+                                    ),
+                                    onTap: () => context.go('/tareas/editar/${tarea.id}'),
+                                    onEliminar: () => _eliminarTarea(tarea.id),
+                                  ),
                                 );
                               },
                             ),
