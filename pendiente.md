@@ -44,7 +44,7 @@
 
 ## Fase 5 — Heavy
 
-| # | Tarea | Estado |
+| # | Tarea | Esdo |
 |---|-------|--------|
 | 5.1 | Editor enriquecido (flutter_quill) | ⬜ |
 | 5.2 | Adjuntar imágenes (Supabase Storage) | ⬜ |
