@@ -4,8 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseConfig {
   static Future<void> initialize() async {
     await Supabase.initialize(
-      url: dotenv.get('SUPABASE_URL'),
-      publishableKey: dotenv.get('SUPABASE_ANON_KEY'),
+      url: dotenv.get('SUPABASE_URL',
+          fallback: const String.fromEnvironment('SUPABASE_URL')),
+      publishableKey: dotenv.get('SUPABASE_ANON_KEY',
+          fallback: const String.fromEnvironment('SUPABASE_ANON_KEY')),
     );
   }
 }
