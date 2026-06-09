@@ -5,6 +5,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+project.layout.buildDirectory.set(
+    file("${project.rootProject.projectDir.parentFile}/build/${project.name}")
+)
+
 android {
     namespace = "com.notebooksenior.notebook_senior"
     compileSdk = flutter.compileSdkVersion

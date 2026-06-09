@@ -9,6 +9,7 @@
 
 - [Fase 0 — Configuración Previa (Google Cloud Console)](#fase-0--configuración-previa-google-cloud-console)
 - [Fase 1 — Google Sign-In](#fase-1--google-sign-in)
+- [Fase 1.5 — Notificaciones Push (FCM)](#fase-15--notificaciones-push-fcm)
 - [Fase 2 — Subida de Archivos a Notas](#fase-2--subida-de-archivos-a-notas)
 - [Fase 3 — Google Calendar (Exportar Eventos)](#fase-3--google-calendar-exportar-eventos)
 - [Fase 4 — Compartir Notas entre Usuarios](#fase-4--compartir-notas-entre-usuarios)
@@ -366,6 +367,409 @@ flutter run
 3. Seleccionar cuenta → debe crear sesión y redirigir al dashboard
 4. Ir a Configuración → debe mostrar "Conectado con Google"
 5. Cerrar sesión → debe funcionar correctamente
+
+---
+
+## Fase 1.5 — Notificaciones Push (FCM)
+
+> Firebase Cloud Messaging (FCM) es el servicio gratuito de Google para enviar notificaciones push a dispositivos móviles. Se integra naturalmente con el proyecto de Google Cloud ya creado en Fase 0.
+
+### Arquitectura
+
+```
+Reminder creado desde cualquier dispositivo (mobile/web)
+        │
+        ▼
+  Supabase DB (INSERT en recordatorios / tareas)
+        │
+        ├── Realtime channel ──► App móvil (foreground) → agenda notif. local
+        │
+        └── Database Trigger ──► Supabase Edge Function
+                │
+                └── POST a FCM HTTP API
+                        │
+                        ▼
+                App móvil (background/terminada) → push notification
+```
+
+### Alternativa 100% gratis (sin FCM)
+
+Si no se quiere depender de FCM, se puede usar solo **Supabase Realtime**:
+- Cuando el recordatorio se crea desde el navegador, el `RealtimeChannel` notifica a la app móvil
+- La app agenda una notificación local
+- **Límite**: solo funciona si la app está en foreground o ha sido abierta recientemente
+
+Para cubrir el caso de app terminada sin FCM, se puede complementar con `workmanager` (tarea periódica cada 15 min que revisa recordatorios próximos). Es gratis pero menos inmediato.
+
+---
+
+### Archivos a modificar/crear: 6
+
+| Archivo | Acción |
+|---|---|
+| `pubspec.yaml` | Agregar `firebase_messaging` + `firebase_core` |
+| `lib/core/services/push_notification_service.dart` | **NUEVO** Servicio de push (token + FCM) |
+| `lib/core/providers/auth_provider.dart` | Al iniciar sesión, registrar token FCM |
+| `lib/core/providers/recordatorios_provider.dart` | Reprogramar al recibir push |
+| `supabase/migrations/20250613_user_device_tokens.sql` | **NUEVO** Tabla de tokens |
+| `supabase/functions/send-reminder-push/index.ts` | **NUEVO** Edge Function |
+
+### Paso 1.5.1 — pubspec.yaml
+
+```yaml
+  firebase_core: ^3.12.0
+  firebase_messaging: ^15.2.0
+```
+
+```bash
+flutter pub get
+```
+
+### Paso 1.5.2 — Configurar Firebase en el proyecto
+
+1. Ir a **Firebase Console** → Agregar proyecto → seleccionar "Notebook Senior" (el mismo de Google Cloud)
+2. Firebase ya detecta el proyecto de Google Cloud existente
+3. Registrar la app:
+
+#### Android
+1. Package name: `com.notebook.senior` (el de `android/app/build.gradle`)
+2. Descargar `google-services.json`
+3. Colocar en `android/app/google-services.json`
+4. En `android/build.gradle`, agregar:
+   ```gradle
+   dependencies {
+     classpath 'com.google.gms:google-services:4.4.2'
+   }
+   ```
+5. En `android/app/build.gradle`, al final:
+   ```gradle
+   apply plugin: 'com.google.gms.google-services'
+   ```
+
+#### iOS
+1. Bundle ID: `com.notebook.senior`
+2. Descargar `GoogleService-Info.plist`
+3. Colocar en `ios/Runner/` (abrir en Xcode y agregar al proyecto)
+4. Habilitar **Push Notifications** capability en Xcode
+
+#### Web
+1. Agregar Firebase config en `web/index.html`:
+   ```html
+   <script type="module">
+     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
+     import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-messaging.js';
+     // Config desde Firebase Console
+   </script>
+   ```
+
+### Paso 1.5.3 — Migración SQL: user_device_tokens
+
+Crear `supabase/migrations/20250613_user_device_tokens.sql`:
+
+```sql
+-- REGISTRO DE TOKENS FCM POR USUARIO
+CREATE TABLE user_device_tokens (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) NOT NULL,
+  token TEXT NOT NULL,
+  platform TEXT NOT NULL CHECK (platform IN ('android', 'ios', 'web')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, token)
+);
+
+CREATE INDEX idx_user_device_tokens_user_id ON user_device_tokens(user_id);
+
+ALTER TABLE user_device_tokens ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Usuario gestiona sus propios tokens"
+  ON user_device_tokens FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+```
+
+### Paso 1.5.4 — PushNotificationService (nuevo)
+
+Crear `lib/core/services/push_notification_service.dart`:
+
+```dart
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class PushNotificationService {
+  static final PushNotificationService _instance = PushNotificationService._();
+  factory PushNotificationService() => _instance;
+  PushNotificationService._();
+
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+
+  bool get _esCompatible => !kIsWeb;
+
+  Future<String?> getToken() async {
+    try {
+      if (kIsWeb) {
+        // En web el token se obtiene de forma distinta
+        return null;
+      }
+      final settings = await _fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        return null;
+      }
+      return await _fcm.getToken();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> registrarToken(String userId) async {
+    final token = await getToken();
+    if (token == null) return;
+
+    String platform;
+    if (kIsWeb) {
+      platform = 'web';
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      platform = 'android';
+    } else {
+      platform = 'ios';
+    }
+
+    try {
+      // Upsert: insertar o actualizar si ya existe
+      await Supabase.instance.client.from('user_device_tokens').upsert({
+        'user_id': userId,
+        'token': token,
+        'platform': platform,
+      }, onConflict: 'user_id,token');
+    } catch (_) {}
+  }
+
+  void onMessageListener(void Function(RemoteMessage message) callback) {
+    FirebaseMessaging.onMessage.listen(callback);
+  }
+
+  void onMessageOpenedAppListener(void Function(RemoteMessage message) callback) {
+    FirebaseMessaging.onMessageOpenedApp.listen(callback);
+  }
+
+  Future<RemoteMessage?> getInitialMessage() async {
+    return _fcm.getInitialMessage();
+  }
+}
+```
+
+### Paso 1.5.5 — AuthProvider: registrar token al iniciar sesión
+
+En `lib/core/providers/auth_provider.dart`, después de iniciar sesión exitosamente (en `_onAuthChange` o en los métodos `login`):
+
+```dart
+import '../services/push_notification_service.dart';
+
+// Después de setUser en _onAuthChange:
+final pushService = PushNotificationService();
+if (event.session?.user != null) {
+  pushService.registrarToken(event.session!.user!.id);
+}
+```
+
+### Paso 1.5.6 — RecordatoriosProvider: escuchar push en primer plano
+
+En `lib/core/providers/recordatorios_provider.dart`, en el constructor o método de inicialización:
+
+```dart
+import '../services/push_notification_service.dart';
+
+// Dentro de _suscribirCambios o en un método init:
+PushNotificationService().onMessageListener((message) {
+  final data = message.data;
+  if (data['type'] == 'reminder') {
+    reprogramarPendientes();
+  }
+});
+```
+
+### Paso 1.5.7 — Edge Function: send-reminder-push
+
+Crear `supabase/functions/send-reminder-push/index.ts`:
+
+```typescript
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const FCM_URL = "https://fcm.googleapis.com/fcm/send";
+const FCM_SERVER_KEY = Deno.env.get("FCM_SERVER_KEY") ?? "";
+
+serve(async (req) => {
+  try {
+    const { user_id, titulo, descripcion, tipo } = await req.json();
+
+    // Crear cliente Supabase con service_role (bypass RLS)
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+    );
+
+    // Obtener todos los tokens del usuario
+    const { data: tokens } = await supabase
+      .from("user_device_tokens")
+      .select("token, platform")
+      .eq("user_id", user_id);
+
+    if (!tokens || tokens.length === 0) {
+      return new Response(JSON.stringify({ ok: true, sent: 0 }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    let sent = 0;
+    for (const { token, platform } of tokens) {
+      const payload = {
+        to: token,
+        priority: "high",
+        notification: {
+          title: titulo ?? "Notebook Senior",
+          body: descripcion ?? "Tienes un recordatorio pendiente",
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+        },
+        data: {
+          type: tipo ?? "reminder",
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+        },
+      };
+
+      // Si es Android, agregar channel_id
+      if (platform === "android") {
+        payload.notification = {
+          ...payload.notification,
+          android_channel_id: "recordatorios",
+        };
+      }
+
+      const response = await fetch(FCM_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `key=${FCM_SERVER_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) sent++;
+    }
+
+    return new Response(JSON.stringify({ ok: true, sent }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+});
+```
+
+### Paso 1.5.8 — Database Trigger
+
+Crear `supabase/migrations/20250613_triggers_push.sql`:
+
+```sql
+-- Trigger para enviar push al insertar un recordatorio
+CREATE OR REPLACE FUNCTION public.send_reminder_push()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM
+    net.http_post(
+      url := current_setting('supabase_functions.url') || '/send-reminder-push',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || current_setting('supabase_functions.service_key')
+      ),
+      body := jsonb_build_object(
+        'user_id', NEW.user_id,
+        'titulo', NEW.titulo,
+        'descripcion', NEW.descripcion,
+        'tipo', 'reminder'
+      )::text
+    );
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_recordatorio_insert
+  AFTER INSERT ON recordatorios
+  FOR EACH ROW
+  EXECUTE FUNCTION public.send_reminder_push();
+
+-- Mismo trigger para tareas
+CREATE OR REPLACE FUNCTION public.send_task_push()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM
+    net.http_post(
+      url := current_setting('supabase_functions.url') || '/send-reminder-push',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || current_setting('supabase_functions.service_key')
+      ),
+      body := jsonb_build_object(
+        'user_id', NEW.user_id,
+        'titulo', NEW.titulo,
+        'descripcion', NEW.descripcion,
+        'tipo', 'task'
+      )::text
+    );
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_tarea_insert
+  AFTER INSERT ON tareas
+  FOR EACH ROW
+  EXECUTE FUNCTION public.send_task_push();
+```
+
+**Nota**: El trigger usa `net.http_post` de la extensión `pg_net`. Habilitarla en SQL Editor:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_net;
+```
+
+### Paso 1.5.9 — Variables de entorno
+
+Agregar a `.env`:
+
+```yaml
+FCM_SERVER_KEY=AAAAxxxxxxxxx  # Desde Firebase Console → Project Settings → Cloud Messaging
+```
+
+Y en Supabase Dashboard → **Edge Functions** → Configurar secretos:
+
+```bash
+supabase secrets set FCM_SERVER_KEY=AAAAxxxxxxxxx
+```
+
+### Verificación Fase 1.5
+
+```bash
+supabase functions deploy send-reminder-push --no-verify-jwt
+flutter run
+```
+
+1. Iniciar sesión → el token FCM debe guardarse en `user_device_tokens`
+2. Crear un recordatorio desde la app → debe enviar push
+3. Crear un recordatorio desde otra sesión (navegador + Supabase dashboard) → debe llegar push al celular
+4. Cerrar la app → crear recordatorio desde browser → debe llegar push en segundo plano
 
 ---
 
@@ -2265,12 +2669,13 @@ En `web/index.html`, dentro del `<head>`:
 |---|---|---|
 | 1 | Fase 0 | Google Cloud Console, Supabase Auth/Storage |
 | 2 | Fase 1 | Google Sign-In completo |
-| 3 | Fase 2 (parte 1) | SQL, modelo, DatabaseService, Provider |
-| 4 | Fase 2 (parte 2) | UI: formulario, detalle, lista |
-| 5 | Fase 3 (parte 1) | CalendarSyncService, modelos, DB |
-| 6 | Fase 3 (parte 2) | Integración en providers + UI toggles |
-| 7 | Fase 4 | Compartir notas completo |
-| 8 | Testing | Verificar todo, corregir bugs |
+| 3 | Fase 1.5 | FCM: Firebase config, tabla tokens, Edge Function, triggers |
+| 4 | Fase 2 (parte 1) | SQL, modelo, DatabaseService, Provider |
+| 5 | Fase 2 (parte 2) | UI: formulario, detalle, lista |
+| 6 | Fase 3 (parte 1) | CalendarSyncService, modelos, DB |
+| 7 | Fase 3 (parte 2) | Integración en providers + UI toggles |
+| 8 | Fase 4 | Compartir notas completo |
+| 9 | Testing | Verificar todo, corregir bugs |
 
 ---
 

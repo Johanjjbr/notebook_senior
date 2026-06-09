@@ -59,7 +59,10 @@ class TareasProvider extends ChangeNotifier {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'tareas',
-          callback: (_) => cargarTareas(),
+          callback: (_) async {
+            await cargarTareas();
+            await reprogramarPendientes();
+          },
         )
         .subscribe();
 
@@ -383,6 +386,24 @@ class TareasProvider extends ChangeNotifier {
 
     _guardando = false;
     notifyListeners();
+  }
+
+  Future<void> reprogramarPendientes() async {
+    try {
+      final now = DateTime.now();
+      for (final t in _tareas) {
+        if (!t.completada &&
+            t.fechaVencimiento != null &&
+            t.fechaVencimiento!.isAfter(now)) {
+          await _notificacionService.programarTarea(
+            t.id, t.titulo, t.fechaVencimiento!,
+          );
+        }
+      }
+    } catch (e) {
+      _error = 'Error al reprogramar tareas';
+      notifyListeners();
+    }
   }
 
   Future<void> crearCategoria(String nombre, String color) async {

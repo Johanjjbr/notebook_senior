@@ -33,6 +33,17 @@ class NotificacionService {
     );
 
     await _plugin.initialize(initSettings);
+    await _solicitarPermisosAndroid();
+  }
+
+  Future<void> _solicitarPermisosAndroid() async {
+    if (!_esCompatible) return;
+    final androidPlugin =
+        _plugin.resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (androidPlugin != null) {
+      await androidPlugin.requestNotificationsPermission();
+    }
   }
 
   Future<void> programarRecordatorio(Recordatorio recordatorio) async {

@@ -45,7 +45,10 @@ class RecordatoriosProvider extends ChangeNotifier {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'recordatorios',
-          callback: (_) => cargarRecordatorios(),
+          callback: (_) async {
+            await cargarRecordatorios();
+            await reprogramarPendientes();
+          },
         )
         .subscribe();
   }
