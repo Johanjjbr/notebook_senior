@@ -4,6 +4,10 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import '../../models/recordatorio.dart';
 
+int _notificationId(String prefix, String id) {
+  return '$prefix-$id'.hashCode;
+}
+
 class NotificacionService {
   static final NotificacionService _instance = NotificacionService._();
   factory NotificacionService() => _instance;
@@ -13,9 +17,11 @@ class NotificacionService {
       FlutterLocalNotificationsPlugin();
 
   bool get _esCompatible => !kIsWeb;
+  bool _inicializado = false;
 
   Future<void> initialize() async {
-    if (!_esCompatible) return;
+    if (!_esCompatible || _inicializado) return;
+    _inicializado = true;
 
     tz_data.initializeTimeZones();
 
@@ -34,15 +40,28 @@ class NotificacionService {
 
     await _plugin.initialize(initSettings);
     await _solicitarPermisosAndroid();
+    await _solicitarPermisosIOS();
   }
 
   Future<void> _solicitarPermisosAndroid() async {
-    if (!_esCompatible) return;
     final androidPlugin =
         _plugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     if (androidPlugin != null) {
       await androidPlugin.requestNotificationsPermission();
+    }
+  }
+
+  Future<void> _solicitarPermisosIOS() async {
+    final iosPlugin =
+        _plugin.resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
+    if (iosPlugin != null) {
+      await iosPlugin.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
     }
   }
 
@@ -72,7 +91,7 @@ class NotificacionService {
     );
 
     await _plugin.zonedSchedule(
-      recordatorio.id.hashCode,
+      _notificationId('recordatorio', recordatorio.id),
       recordatorio.titulo,
       recordatorio.descripcion.isNotEmpty
           ? recordatorio.descripcion
@@ -87,13 +106,22 @@ class NotificacionService {
 
   Future<void> cancelarRecordatorio(String id) async {
     if (!_esCompatible) return;
-    await _plugin.cancel(id.hashCode);
+    await _plugin.cancel(_notificationId('recordatorio', id));
   }
 
-  Future<void> programarTarea(String tareaId, String titulo, DateTime fechaVencimiento) async {
+  Future<void> programarTarea(
+    String tareaId,
+    String titulo,
+    DateTime fechaVencimiento, {
+    String descripcion = '',
+  }) async {
     if (!_esCompatible) return;
 
-    final scheduledDate = tz.TZDateTime.from(fechaVencimiento, tz.local);
+    final scheduledDate = tz.TZDateTime.from(
+      fechaVencimiento,
+      tz.local,
+    ).add(const Duration(hours: 6));
+
     if (scheduledDate.isBefore(tz.TZDateTime.now(tz.local))) return;
 
     const androidDetails = AndroidNotificationDetails(
@@ -111,10 +139,14 @@ class NotificacionService {
       iOS: iosDetails,
     );
 
+    final body = descripcion.isNotEmpty
+        ? descripcion
+        : 'Tienes una tarea pendiente por completar';
+
     await _plugin.zonedSchedule(
-      tareaId.hashCode,
+      _notificationId('tarea', tareaId),
       'Tarea vence hoy: $titulo',
-      'Tienes una tarea pendiente por completar',
+      body,
       scheduledDate,
       details,
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -125,7 +157,7 @@ class NotificacionService {
 
   Future<void> cancelarTarea(String id) async {
     if (!_esCompatible) return;
-    await _plugin.cancel(id.hashCode);
+    await _plugin.cancel(_notificationId('tarea', id));
   }
 
   Future<void> cancelarTodos() async {

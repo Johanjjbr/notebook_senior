@@ -10,6 +10,8 @@ class Recordatorio {
   final String? referenciaId;
   final bool completado;
   final bool notificado;
+  final Recurrencia recurrencia;
+  final DateTime? recurrenciaFin;
   final DateTime createdAt;
 
   const Recordatorio({
@@ -22,6 +24,8 @@ class Recordatorio {
     this.referenciaId,
     this.completado = false,
     this.notificado = false,
+    this.recurrencia = Recurrencia.none,
+    this.recurrenciaFin,
     required this.createdAt,
   });
 
@@ -36,6 +40,10 @@ class Recordatorio {
       referenciaId: json['referencia_id'] as String?,
       completado: json['completado'] as bool? ?? false,
       notificado: json['notificado'] as bool? ?? false,
+      recurrencia: Recurrencia.fromJson(json['recurrencia'] as String? ?? 'none'),
+      recurrenciaFin: json['recurrencia_fin'] != null
+          ? DateTime.parse(json['recurrencia_fin'] as String)
+          : null,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -51,6 +59,7 @@ class Recordatorio {
       'referencia_id': referenciaId,
       'completado': completado,
       'notificado': notificado,
+      'created_at': createdAt.toIso8601String(),
     };
   }
 
@@ -64,6 +73,8 @@ class Recordatorio {
     String? referenciaId,
     bool? completado,
     bool? notificado,
+    Recurrencia? recurrencia,
+    DateTime? recurrenciaFin,
     DateTime? createdAt,
   }) {
     return Recordatorio(
@@ -76,6 +87,8 @@ class Recordatorio {
       referenciaId: referenciaId ?? this.referenciaId,
       completado: completado ?? this.completado,
       notificado: notificado ?? this.notificado,
+      recurrencia: recurrencia ?? this.recurrencia,
+      recurrenciaFin: recurrenciaFin ?? this.recurrenciaFin,
       createdAt: createdAt ?? this.createdAt,
     );
   }

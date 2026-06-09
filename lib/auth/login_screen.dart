@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../core/providers/auth_provider.dart';
+import '../l10n/app_localizations.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,6 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final auth = context.watch<AuthProvider>();
     final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
@@ -84,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         SizedBox(height: spacingSmall),
                         Text(
-                          'Notebook Senior',
+                          l10n.appTitle,
                           style: titleFontSize?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.primary,
@@ -93,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         SizedBox(height: spacingSmall),
                         if (!isLandscape || isLargeScreen)
                           Text(
-                            'Tus notas y tareas siempre contigo',
+                            l10n.appSubtitle,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               color: Colors.grey[600],
                             ),
@@ -102,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _emailController,
                           decoration: InputDecoration(
-                            labelText: 'Correo electrónico',
+                            labelText: l10n.emailLabel,
                             prefixIcon: const Icon(Icons.email_outlined),
                             contentPadding: EdgeInsets.symmetric(
                               horizontal: 16,
@@ -111,8 +113,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           keyboardType: TextInputType.emailAddress,
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Ingresa tu correo';
-                            if (!v.contains('@')) return 'Correo inválido';
+                            if (v == null || v.isEmpty) return l10n.emailRequired;
+                            if (!v.contains('@')) return l10n.emailInvalid;
                             return null;
                           },
                         ),
@@ -120,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _passwordController,
                           decoration: InputDecoration(
-                            labelText: 'Contraseña',
+                            labelText: l10n.passwordLabel,
                             prefixIcon: const Icon(Icons.lock_outlined),
                             contentPadding: EdgeInsets.symmetric(
                               horizontal: 16,
@@ -129,8 +131,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           obscureText: true,
                           validator: (v) {
-                            if (v == null || v.isEmpty) return 'Ingresa tu contraseña';
-                            if (v.length < 6) return 'Mínimo 6 caracteres';
+                            if (v == null || v.isEmpty) return l10n.passwordRequired;
+                            if (v.length < 6) return l10n.passwordMinLength;
                             return null;
                           },
                         ),
@@ -147,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     child: CircularProgressIndicator(strokeWidth: 2),
                                   )
                                 : Text(
-                                    _esRegistro ? 'Crear cuenta' : 'Iniciar sesión',
+                                    _esRegistro ? l10n.registerTitle : l10n.loginTitle,
                                     style: TextStyle(
                                       fontSize: isSmallScreen ? 16 : 18,
                                     ),
@@ -159,8 +161,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: () => setState(() => _esRegistro = !_esRegistro),
                           child: Text(
                             _esRegistro
-                                ? '¿Ya tienes cuenta? Inicia sesión'
-                                : '¿No tienes cuenta? Regístrate',
+                                ? l10n.hasAccount
+                                : l10n.noAccount,
                             style: TextStyle(
                               fontSize: isSmallScreen ? 14 : 16,
                             ),

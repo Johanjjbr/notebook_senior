@@ -7,6 +7,8 @@ import '../models/tarea.dart';
 import '../models/enums.dart';
 import '../models/checklist_item.dart';
 import '../widgets/categoria_filter_chips.dart';
+import '../widgets/shimmer_loading.dart';
+import '../l10n/app_localizations.dart';
 
 class TareaFormScreen extends StatefulWidget {
   final String? tareaId;
@@ -27,6 +29,8 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
 
   Prioridad _prioridad = Prioridad.media;
   DateTime? _fechaVencimiento;
+  Recurrencia _recurrencia = Recurrencia.none;
+  DateTime? _recurrenciaFin;
   List<String> _categoriaIds = [];
   Tarea? _tareaOriginal;
   bool _cargando = true;
@@ -51,6 +55,8 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
       _descripcionController.text = _tareaOriginal!.descripcion;
       _prioridad = _tareaOriginal!.prioridad;
       _fechaVencimiento = _tareaOriginal!.fechaVencimiento;
+      _recurrencia = _tareaOriginal!.recurrencia;
+      _recurrenciaFin = _tareaOriginal!.recurrenciaFin;
       _categoriaIds = _tareaOriginal!.categorias.map((c) => c.id).toList();
       for (final item in _tareaOriginal!.checklistItems) {
         final ctrl = TextEditingController(text: item.texto);
@@ -98,6 +104,16 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
     });
   }
 
+  void _onReorderChecklist(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex--;
+      final ctrl = _checklistControllers.removeAt(oldIndex);
+      final node = _checklistNodes.removeAt(oldIndex);
+      _checklistControllers.insert(newIndex, ctrl);
+      _checklistNodes.insert(newIndex, node);
+    });
+  }
+
   Future<void> _seleccionarFecha() async {
     final date = await showDatePicker(
       context: context,
@@ -138,13 +154,16 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
           descripcion: _descripcionController.text.trim(),
           prioridad: _prioridad,
           fechaVencimiento: _fechaVencimiento,
+          recurrencia: _recurrencia,
+          recurrenciaFin: _recurrenciaFin,
         ),
         checklistItems: items,
         categoriaIds: _categoriaIds,
       );
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tarea actualizada')),
+          SnackBar(content: Text(l10n.taskUpdated)),
         );
       }
     } else {
@@ -156,6 +175,8 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
           descripcion: _descripcionController.text.trim(),
           prioridad: _prioridad,
           fechaVencimiento: _fechaVencimiento,
+          recurrencia: _recurrencia,
+          recurrenciaFin: _recurrenciaFin,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         ),
@@ -163,8 +184,9 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
         categoriaIds: _categoriaIds,
       );
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tarea creada')),
+          SnackBar(content: Text(l10n.taskCreated)),
         );
       }
     }
@@ -174,19 +196,20 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<TareasProvider>();
     final theme = Theme.of(context);
 
     if (_cargando) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Cargando...')),
-        body: const Center(child: CircularProgressIndicator()),
+        appBar: AppBar(title: Text(l10n.loading)),
+        body: const ShimmerForm(),
       );
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.tareaId != null ? 'Editar tarea' : 'Nueva tarea'),
+        title: Text(widget.tareaId != null ? l10n.editTask : l10n.newTaskTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.check),
@@ -201,17 +224,17 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
           children: [
             TextFormField(
               controller: _tituloController,
-              decoration: const InputDecoration(
-                labelText: 'Título',
-                hintText: '¿Qué tienes que hacer?',
+              decoration: InputDecoration(
+                labelText: l10n.taskTitle,
+                hintText: l10n.taskHint,
               ),
-              validator: (v) => v == null || v.trim().isEmpty ? 'El título es obligatorio' : null,
+              validator: (v) => v == null || v.trim().isEmpty ? l10n.titleRequired : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _descripcionController,
-              decoration: const InputDecoration(
-                labelText: 'Descripción (opcional)',
+              decoration: InputDecoration(
+                labelText: l10n.taskDescription,
                 alignLabelWithHint: true,
               ),
               maxLines: 3,
@@ -221,13 +244,13 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
 
             Row(
               children: [
-                Text('Prioridad', style: theme.textTheme.titleMedium),
+                Text(l10n.priority, style: theme.textTheme.titleMedium),
                 const Spacer(),
                 SegmentedButton<Prioridad>(
-                  segments: const [
-                    ButtonSegment(value: Prioridad.baja, label: Text('Baja'), icon: Icon(Icons.arrow_downward, size: 16)),
-                    ButtonSegment(value: Prioridad.media, label: Text('Media'), icon: Icon(Icons.remove, size: 16)),
-                    ButtonSegment(value: Prioridad.alta, label: Text('Alta'), icon: Icon(Icons.arrow_upward, size: 16)),
+                  segments: [
+                    ButtonSegment(value: Prioridad.baja, label: Text(l10n.low), icon: Icon(Icons.arrow_downward, size: 16)),
+                    ButtonSegment(value: Prioridad.media, label: Text(l10n.medium), icon: Icon(Icons.remove, size: 16)),
+                    ButtonSegment(value: Prioridad.alta, label: Text(l10n.high), icon: Icon(Icons.arrow_upward, size: 16)),
                   ],
                   selected: {_prioridad},
                   onSelectionChanged: (v) => setState(() => _prioridad = v.first),
@@ -240,7 +263,7 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
               leading: const Icon(Icons.event),
               title: Text(_fechaVencimiento != null
                   ? DateFormat('d MMM y').format(_fechaVencimiento!)
-                  : 'Sin fecha de vencimiento'),
+                  : l10n.noDueDate),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -258,44 +281,97 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
             ),
             const SizedBox(height: 16),
 
-            Text('Checklist', style: theme.textTheme.titleMedium),
+            Text('Repetir', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            ...List.generate(_checklistControllers.length, (i) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
+            _RecurrenciaSelector(
+              value: _recurrencia,
+              onChanged: (v) => setState(() => _recurrencia = v),
+            ),
+            if (_recurrencia != Recurrencia.none) ...[
+              const SizedBox(height: 8),
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.event),
+                title: Text(
+                  _recurrenciaFin != null
+                      ? 'Hasta ${DateFormat('d MMM y').format(_recurrenciaFin!)}'
+                      : 'Sin fecha de fin',
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.drag_handle, color: Colors.grey[400]),
-                    Expanded(
-                      child: TextField(
-                        controller: _checklistControllers[i],
-                        focusNode: _checklistNodes[i],
-                        decoration: InputDecoration(
-                          hintText: 'Paso ${i + 1}',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                        ),
+                    if (_recurrenciaFin != null)
+                      IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () => setState(() => _recurrenciaFin = null),
                       ),
-                    ),
                     IconButton(
-                      icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-                      onPressed: () => _removerItemChecklist(i),
+                      icon: const Icon(Icons.calendar_month, size: 20),
+                      onPressed: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _recurrenciaFin ?? (_fechaVencimiento ?? DateTime.now()).add(const Duration(days: 30)),
+                          firstDate: _fechaVencimiento ?? DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                        );
+                        if (date != null) setState(() => _recurrenciaFin = date);
+                      },
                     ),
                   ],
                 ),
-              );
-            }),
+              ),
+            ],
+            const SizedBox(height: 24),
+
+            Text(l10n.checklist, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: _checklistControllers.length,
+              onReorder: _onReorderChecklist,
+              itemBuilder: (context, i) {
+                return Padding(
+                  key: ValueKey('checklist_$i'),
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      ReorderableDragStartListener(
+                        index: i,
+                        child: Icon(Icons.drag_handle, color: Colors.grey[400]),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _checklistControllers[i],
+                          focusNode: _checklistNodes[i],
+                          decoration: InputDecoration(
+                            hintText: '${l10n.stepHint} ${i + 1}',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                        onPressed: () => _removerItemChecklist(i),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
             TextButton.icon(
               icon: const Icon(Icons.add),
-              label: const Text('Añadir paso'),
+              label: Text(l10n.addStep),
               onPressed: _agregarItemChecklist,
             ),
             const SizedBox(height: 24),
 
-            Text('Categorías', style: theme.textTheme.titleMedium),
+            Text(l10n.categories, style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             CategoriaFilterChips(
               categorias: provider.categorias,
@@ -304,6 +380,35 @@ class _TareaFormScreenState extends State<TareaFormScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RecurrenciaSelector extends StatelessWidget {
+  final Recurrencia value;
+  final ValueChanged<Recurrencia> onChanged;
+
+  const _RecurrenciaSelector({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: Recurrencia.values.map((r) {
+          final selected = value == r;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(r.label,
+                  style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
+              selected: selected,
+              selectedColor: Theme.of(context).colorScheme.primary,
+              onSelected: (_) => onChanged(r),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

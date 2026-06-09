@@ -3,6 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../core/providers/recordatorios_provider.dart';
 import '../models/recordatorio.dart';
+import '../models/enums.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/shimmer_loading.dart';
+import '../widgets/recordatorio_tile.dart';
+import '../l10n/app_localizations.dart';
 
 class RecordatoriosScreen extends StatefulWidget {
   const RecordatoriosScreen({super.key});
@@ -37,9 +42,12 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
   }
 
   void _mostrarDialogo({Recordatorio? existente}) {
+    final l10n = AppLocalizations.of(context)!;
     final tituloCtrl = TextEditingController(text: existente?.titulo);
     final descCtrl = TextEditingController(text: existente?.descripcion);
     DateTime fechaHora = existente?.fechaHora ?? DateTime.now().add(const Duration(hours: 1));
+    Recurrencia recurrencia = existente?.recurrencia ?? Recurrencia.none;
+    DateTime? recurrenciaFin = existente?.recurrenciaFin;
     final formKey = GlobalKey<FormState>();
     final esEdicion = existente != null;
 
@@ -63,47 +71,35 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      esEdicion ? 'Editar recordatorio' : 'Nuevo recordatorio',
+                      esEdicion ? l10n.editReminder : l10n.newReminder,
                       style: Theme.of(ctx).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: tituloCtrl,
-                      decoration:
-                          const InputDecoration(labelText: 'Título'),
-                      validator: (v) =>
-                          v == null || v.isEmpty ? 'Obligatorio' : null,
+                      decoration: InputDecoration(labelText: l10n.reminderTitle),
+                      validator: (v) => v == null || v.isEmpty ? l10n.required : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: descCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Descripción (opcional)',
-                      ),
+                      decoration: InputDecoration(labelText: l10n.reminderDescription),
                     ),
                     const SizedBox(height: 12),
                     ListTile(
                       leading: const Icon(Icons.calendar_month),
-                      title:
-                          Text(DateFormat('d MMM y').format(fechaHora)),
+                      title: Text(DateFormat('d MMM y').format(fechaHora)),
                       trailing: const Icon(Icons.edit),
                       onTap: () async {
                         final date = await showDatePicker(
                           context: ctx,
                           initialDate: fechaHora,
                           firstDate: DateTime.now().subtract(const Duration(days: 1)),
-                          lastDate: DateTime.now()
-                              .add(const Duration(days: 365)),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
                         );
                         if (date != null) {
                           setSheetState(() {
-                            fechaHora = DateTime(
-                              date.year,
-                              date.month,
-                              date.day,
-                              fechaHora.hour,
-                              fechaHora.minute,
-                            );
+                            fechaHora = DateTime(date.year, date.month, date.day, fechaHora.hour, fechaHora.minute);
                           });
                         }
                       },
@@ -115,41 +111,77 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                       onTap: () async {
                         final time = await showTimePicker(
                           context: ctx,
-                          initialTime:
-                              TimeOfDay.fromDateTime(fechaHora),
+                          initialTime: TimeOfDay.fromDateTime(fechaHora),
                         );
                         if (time != null) {
                           setSheetState(() {
-                            fechaHora = DateTime(
-                              fechaHora.year,
-                              fechaHora.month,
-                              fechaHora.day,
-                              time.hour,
-                              time.minute,
-                            );
+                            fechaHora = DateTime(fechaHora.year, fechaHora.month, fechaHora.day, time.hour, time.minute);
                           });
                         }
                       },
                     ),
+                    const SizedBox(height: 8),
+                    Text('Repetir', style: Theme.of(ctx).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    _RecurrenciaSelector(
+                      value: recurrencia,
+                      onChanged: (v) => setSheetState(() => recurrencia = v),
+                    ),
+                    if (recurrencia != Recurrencia.none) ...[
+                      const SizedBox(height: 8),
+                      ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.event),
+                        title: Text(
+                          recurrenciaFin != null
+                              ? 'Hasta ${DateFormat('d MMM y').format(recurrenciaFin!)}'
+                              : 'Sin fecha de fin',
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (recurrenciaFin != null)
+                              IconButton(
+                                icon: const Icon(Icons.clear, size: 20),
+                                onPressed: () => setSheetState(() => recurrenciaFin = null),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.calendar_month, size: 20),
+                              onPressed: () async {
+                                final date = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: recurrenciaFin ?? fechaHora.add(const Duration(days: 30)),
+                                  firstDate: fechaHora,
+                                  lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
+                                );
+                                if (date != null) setSheetState(() => recurrenciaFin = date);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: () async {
                           if (!formKey.currentState!.validate()) return;
-                          final provider = context
-                              .read<RecordatoriosProvider>();
+                          final provider = context.read<RecordatoriosProvider>();
                           if (esEdicion) {
                             await provider.actualizarRecordatorio(
                               existente.copyWith(
                                 titulo: tituloCtrl.text.trim(),
                                 descripcion: descCtrl.text.trim(),
                                 fechaHora: fechaHora,
+                                recurrencia: recurrencia,
+                                recurrenciaFin: recurrenciaFin,
                               ),
                             );
                             if (ctx.mounted) {
+                              final l10n = AppLocalizations.of(ctx)!;
                               ScaffoldMessenger.of(ctx).showSnackBar(
-                                const SnackBar(content: Text('Recordatorio actualizado')),
+                                SnackBar(content: Text(l10n.reminderUpdated)),
                               );
                             }
                           } else {
@@ -159,18 +191,20 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                               titulo: tituloCtrl.text.trim(),
                               descripcion: descCtrl.text.trim(),
                               fechaHora: fechaHora,
+                              recurrencia: recurrencia,
+                              recurrenciaFin: recurrenciaFin,
                               createdAt: DateTime.now(),
                             ));
                             if (ctx.mounted) {
+                              final l10n = AppLocalizations.of(ctx)!;
                               ScaffoldMessenger.of(ctx).showSnackBar(
-                                const SnackBar(content: Text('Recordatorio creado')),
+                                SnackBar(content: Text(l10n.reminderCreated)),
                               );
                             }
                           }
                           if (ctx.mounted) Navigator.pop(ctx);
                         },
-                        child:
-                            const Text('Guardar recordatorio'),
+                        child: Text(l10n.saveReminder),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -184,14 +218,42 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
     );
   }
 
+  Future<void> _completar(Recordatorio r) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    await context.read<RecordatoriosProvider>().completarRecordatorio(r.id);
+    if (mounted) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.reminderCompleted)));
+    }
+  }
+
+  Future<void> _eliminar(Recordatorio r) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final provider = context.read<RecordatoriosProvider>();
+    await provider.eliminarRecordatorio(r.id);
+    if (mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(l10n.reminderDeleted),
+          action: SnackBarAction(
+            label: l10n.undo,
+            onPressed: () => context.read<RecordatoriosProvider>().restaurarUltimoRecordatorio(),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<RecordatoriosProvider>();
     final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Recordatorios'),
+        title: Text(l10n.remindersTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_alarm),
@@ -202,152 +264,33 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
       body: Stack(
         children: [
           provider.cargando
-              ? const Center(child: CircularProgressIndicator())
+              ? const ShimmerList()
               : provider.recordatorios.isEmpty
-                  ? SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                  ? EmptyState(
+                      icon: Icons.alarm_outlined,
+                      title: l10n.noReminders,
+                      subtitle: l10n.createReminderHint,
+                      actionLabel: l10n.createReminder,
+                      actionIcon: Icons.add_alarm,
+                      onAction: () => _mostrarDialogo(),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () => provider.cargarRecordatorios(),
+                      child: ListView(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.all(12),
                         children: [
-                          Icon(Icons.alarm_outlined,
-                              size: 80, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          Text('Sin recordatorios',
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                  color: Colors.grey[600])),
-                          const SizedBox(height: 8),
-                          Text('Programa recordatorios para no olvidar nada',
-                              style: TextStyle(color: Colors.grey[500])),
-                          const SizedBox(height: 24),
-                          FilledButton.icon(
-                            onPressed: () => _mostrarDialogo(),
-                            icon: const Icon(Icons.add_alarm),
-                            label: const Text('Crear recordatorio'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  : ListView(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(12),
-                      children: [
-                        if (provider.proximos.isNotEmpty) ...[
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text('Próximos',
-                                style: theme.textTheme.titleMedium
-                                    ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green,
-                                )),
-                          ),
-                          ...provider.proximos.map((r) =>
-                              Dismissible(
-                                key: ValueKey(r.id),
-                                direction: DismissDirection.horizontal,
-                                background: Container(
-                                  alignment: Alignment.centerLeft,
-                                  padding: const EdgeInsets.only(left: 20),
-                                  decoration: BoxDecoration(
+                          if (provider.proximos.isNotEmpty) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(l10n.upcoming,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
                                     color: Colors.green,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(Icons.check, color: Colors.white),
-                                ),
-                                secondaryBackground: Container(
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(Icons.delete, color: Colors.white),
-                                ),
-                                confirmDismiss: (direction) async {
-                                  if (direction == DismissDirection.endToStart) {
-                                    final messenger = ScaffoldMessenger.of(context);
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title: const Text('Eliminar recordatorio'),
-                                        content: const Text('¿Estás seguro?'),
-                                        actions: [
-                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
-                                        ],
-                                      ),
-                                    );
-                                    if (confirm == true) {
-                                      await provider.eliminarRecordatorio(r.id);
-                                      if (context.mounted) {
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: const Text('Recordatorio eliminado'),
-                                            action: SnackBarAction(
-                                              label: 'Deshacer',
-                                              onPressed: () => context
-                                                  .read<RecordatoriosProvider>()
-                                                  .restaurarUltimoRecordatorio(),
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                    return confirm == true;
-                                  }
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  await provider.completarRecordatorio(r.id);
-                                  if (context.mounted) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(content: Text('Recordatorio completado')),
-                                    );
-                                  }
-                                  return true;
-                                },
-                                child: _RecordatorioTile(
-                                  recordatorio: r,
-                                  onEditar: () => _mostrarDialogo(existente: r),
-                                  onCompletar: () async {
-                                    final messenger = ScaffoldMessenger.of(context);
-                                    await provider.completarRecordatorio(r.id);
-                                    if (context.mounted) {
-                                      messenger.showSnackBar(
-                                        const SnackBar(content: Text('Recordatorio completado')),
-                                      );
-                                    }
-                                  },
-                                  onEliminar: () async {
-                                    final messenger = ScaffoldMessenger.of(context);
-                                    await provider.eliminarRecordatorio(r.id);
-                                    if (context.mounted) {
-                                      messenger.showSnackBar(
-                                        SnackBar(
-                                          content: const Text('Recordatorio eliminado'),
-                                          action: SnackBarAction(
-                                            label: 'Deshacer',
-                                            onPressed: () => context
-                                                .read<RecordatoriosProvider>()
-                                                .restaurarUltimoRecordatorio(),
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                  },
-                                ),
-                              )),
-                          const SizedBox(height: 16),
-                        ],
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text('Todos',
-                              style: theme.textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.bold)),
-                        ),
-                        ...provider.recordatorios.map((r) =>
-                            Dismissible(
-                              key: ValueKey(r.id),
+                                  )),
+                            ),
+                            ...provider.proximos.map((r) => Dismissible(
+                              key: ValueKey('prox-${r.id}'),
                               direction: DismissDirection.horizontal,
                               background: Container(
                                 alignment: Alignment.centerLeft,
@@ -368,76 +311,94 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
                                 child: const Icon(Icons.delete, color: Colors.white),
                               ),
                               confirmDismiss: (direction) async {
-                                  if (direction == DismissDirection.endToStart) {
-                                    final messenger = ScaffoldMessenger.of(context);
-                                    final confirm = await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title: const Text('Eliminar recordatorio'),
-                                        content: const Text('¿Estás seguro?'),
-                                        actions: [
-                                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
-                                        ],
-                                      ),
-                                    );
-                                    if (confirm == true) {
-                                      await provider.eliminarRecordatorio(r.id);
-                                      if (context.mounted) {
-                                        messenger.showSnackBar(
-                                          SnackBar(
-                                            content: const Text('Recordatorio eliminado'),
-                                            action: SnackBarAction(
-                                              label: 'Deshacer',
-                                              onPressed: () => context
-                                                  .read<RecordatoriosProvider>()
-                                                  .restaurarUltimoRecordatorio(),
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                    return confirm == true;
+                                if (direction == DismissDirection.endToStart) {
+                                  final l10n = AppLocalizations.of(context)!;
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: Text(l10n.deleteReminder),
+                                      content: Text(l10n.deleteConfirm),
+                                      actions: [
+                                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+                                        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.delete)),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    await _eliminar(r);
                                   }
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  await provider.completarRecordatorio(r.id);
-                                  if (context.mounted) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(content: Text('Recordatorio completado')),
-                                    );
-                                  }
-                                  return true;
-                                },
-                                child: _RecordatorioTile(
+                                  return confirm == true;
+                                }
+                                await _completar(r);
+                                return true;
+                              },
+                              child: RecordatorioTile(
                                 recordatorio: r,
                                 onEditar: () => _mostrarDialogo(existente: r),
-                                onCompletar: () async {
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  await provider.completarRecordatorio(r.id);
-                                  messenger.showSnackBar(
-                                    const SnackBar(content: Text('Recordatorio completado')),
-                                  );
-                                },
-                                onEliminar: () async {
-                                  final messenger = ScaffoldMessenger.of(context);
-                                  await provider.eliminarRecordatorio(r.id);
-                                  if (context.mounted) {
-                                    messenger.showSnackBar(
-                                      SnackBar(
-                                        content: const Text('Recordatorio eliminado'),
-                                        action: SnackBarAction(
-                                          label: 'Deshacer',
-                                          onPressed: () => context
-                                              .read<RecordatoriosProvider>()
-                                              .restaurarUltimoRecordatorio(),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
+                                onCompletar: () => _completar(r),
+                                onEliminar: () => _eliminar(r),
                               ),
                             )),
-                      ],
+                            const SizedBox(height: 16),
+                          ],
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(l10n.all,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                          ...provider.recordatorios.map((r) => Dismissible(
+                            key: ValueKey('all-${r.id}'),
+                            direction: DismissDirection.horizontal,
+                            background: Container(
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.only(left: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.check, color: Colors.white),
+                            ),
+                            secondaryBackground: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.delete, color: Colors.white),
+                            ),
+                            confirmDismiss: (direction) async {
+                              if (direction == DismissDirection.endToStart) {
+                                final l10n = AppLocalizations.of(context)!;
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: Text(l10n.deleteReminder),
+                                    content: Text(l10n.deleteConfirm),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+                                      FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.delete)),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await _eliminar(r);
+                                }
+                                return confirm == true;
+                              }
+                              await _completar(r);
+                              return true;
+                            },
+                            child: RecordatorioTile(
+                              recordatorio: r,
+                              onEditar: () => _mostrarDialogo(existente: r),
+                              onCompletar: () => _completar(r),
+                              onEliminar: () => _eliminar(r),
+                            ),
+                          )),
+                        ],
+                      ),
                     ),
           if (provider.cargandoMas)
             Positioned(
@@ -459,68 +420,29 @@ class _RecordatoriosScreenState extends State<RecordatoriosScreen> {
   }
 }
 
-class _RecordatorioTile extends StatelessWidget {
-  final Recordatorio recordatorio;
-  final VoidCallback onEditar;
-  final VoidCallback onCompletar;
-  final VoidCallback onEliminar;
+class _RecurrenciaSelector extends StatelessWidget {
+  final Recurrencia value;
+  final ValueChanged<Recurrencia> onChanged;
 
-  const _RecordatorioTile({
-    required this.recordatorio,
-    required this.onEditar,
-    required this.onCompletar,
-    required this.onEliminar,
-  });
+  const _RecurrenciaSelector({required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    final vencido = recordatorio.fechaHora.isBefore(DateTime.now()) &&
-        !recordatorio.completado;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: recordatorio.completado
-              ? Colors.green.withAlpha(30)
-              : vencido
-                  ? Colors.red.withAlpha(30)
-                  : Colors.orange.withAlpha(30),
-          child: Icon(
-            recordatorio.completado ? Icons.check : Icons.alarm,
-            color: recordatorio.completado
-                ? Colors.green
-                : vencido
-                    ? Colors.red
-                    : Colors.orange,
-          ),
-        ),
-        title: Text(
-          recordatorio.titulo,
-          style: TextStyle(
-            decoration: recordatorio.completado
-                ? TextDecoration.lineThrough
-                : null,
-            color:
-                recordatorio.completado ? Colors.grey : null,
-          ),
-        ),
-        subtitle: Text(DateFormat('d MMM y - HH:mm')
-            .format(recordatorio.fechaHora)),
-        trailing: PopupMenuButton(
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'editar', child: Text('Editar')),
-            if (!recordatorio.completado)
-              const PopupMenuItem(
-                  value: 'completar', child: Text('Completar')),
-            const PopupMenuItem(
-                value: 'eliminar', child: Text('Eliminar')),
-          ],
-          onSelected: (v) {
-            if (v == 'editar') onEditar();
-            if (v == 'completar') onCompletar();
-            if (v == 'eliminar') onEliminar();
-          },
-        ),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: Recurrencia.values.map((r) {
+          final selected = value == r;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(r.label, style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
+              selected: selected,
+              selectedColor: Theme.of(context).colorScheme.primary,
+              onSelected: (_) => onChanged(r),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

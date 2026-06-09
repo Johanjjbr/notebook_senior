@@ -1,3 +1,4 @@
+import 'enums.dart';
 import 'categoria.dart';
 
 class Nota {
@@ -7,6 +8,8 @@ class Nota {
   final String contenido;
   final String color;
   final bool archivada;
+  final Recurrencia recurrencia;
+  final DateTime? recurrenciaFin;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<Categoria> categorias;
@@ -18,6 +21,8 @@ class Nota {
     this.contenido = '',
     this.color = '#FFF3CD',
     this.archivada = false,
+    this.recurrencia = Recurrencia.none,
+    this.recurrenciaFin,
     required this.createdAt,
     required this.updatedAt,
     this.categorias = const [],
@@ -31,6 +36,10 @@ class Nota {
       contenido: json['contenido'] as String? ?? '',
       color: json['color'] as String? ?? '#FFF3CD',
       archivada: json['archivada'] as bool? ?? false,
+      recurrencia: Recurrencia.fromJson(json['recurrencia'] as String? ?? 'none'),
+      recurrenciaFin: json['recurrencia_fin'] != null
+          ? DateTime.parse(json['recurrencia_fin'] as String)
+          : null,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
       categorias: (json['categorias'] as List<dynamic>?)
@@ -48,6 +57,7 @@ class Nota {
       'contenido': contenido,
       'color': color,
       'archivada': archivada,
+      'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
   }
@@ -59,6 +69,8 @@ class Nota {
     String? contenido,
     String? color,
     bool? archivada,
+    Recurrencia? recurrencia,
+    DateTime? recurrenciaFin,
     DateTime? createdAt,
     DateTime? updatedAt,
     List<Categoria>? categorias,
@@ -70,6 +82,8 @@ class Nota {
       contenido: contenido ?? this.contenido,
       color: color ?? this.color,
       archivada: archivada ?? this.archivada,
+      recurrencia: recurrencia ?? this.recurrencia,
+      recurrenciaFin: recurrenciaFin ?? this.recurrenciaFin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       categorias: categorias ?? this.categorias,

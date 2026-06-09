@@ -244,6 +244,20 @@ class NotasProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> autoGuardarNota(Nota nota) async {
+    _error = null;
+    try {
+      await _db.actualizarNota(nota);
+      final index = _notas.indexWhere((n) => n.id == nota.id);
+      if (index >= 0) {
+        _notas[index] = nota;
+        notifyListeners();
+      }
+    } catch (e) {
+      // Silencio en auto-save
+    }
+  }
+
   Future<void> restaurarUltimaNota() async {
     final nota = _ultimaNotaEliminada;
     final categoriaIds = _ultimasCategoriasEliminadas;

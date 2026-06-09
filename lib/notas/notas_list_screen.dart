@@ -3,10 +3,26 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../core/providers/notas_provider.dart';
 import '../models/nota.dart';
-import '../widgets/color_utils.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/shimmer_loading.dart';
+import '../widgets/nota_card.dart';
+import '../widgets/search_delegate_notas.dart';
+import '../l10n/app_localizations.dart';
 
 const _sortOptions = ['updated_at', 'created_at', 'titulo'];
-const _sortLabels = {'updated_at': 'Última modificación', 'created_at': 'Fecha creación', 'titulo': 'Título'};
+
+String _sortLabel(String field, AppLocalizations l10n) {
+  switch (field) {
+    case 'updated_at':
+      return l10n.sortLastModified;
+    case 'created_at':
+      return l10n.sortCreated;
+    case 'titulo':
+      return l10n.sortTitle;
+    default:
+      return field;
+  }
+}
 
 class NotasListScreen extends StatefulWidget {
   const NotasListScreen({super.key});
@@ -16,7 +32,6 @@ class NotasListScreen extends StatefulWidget {
 }
 
 class _NotasListScreenState extends State<NotasListScreen> {
-  final _searchController = TextEditingController();
   final _scrollController = ScrollController();
   bool _mostrarArchivadas = false;
 
@@ -33,7 +48,6 @@ class _NotasListScreenState extends State<NotasListScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -45,16 +59,17 @@ class _NotasListScreenState extends State<NotasListScreen> {
   }
 
   Future<void> _eliminarNota(String id) async {
+    final l10n = AppLocalizations.of(context)!;
     final messenger = ScaffoldMessenger.of(context);
     final provider = context.read<NotasProvider>();
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar nota'),
-        content: const Text('¿Estás seguro? Esta acción no se puede deshacer.'),
+        title: Text(l10n.deleteNote),
+        content: Text(l10n.deleteNoteConfirm),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.delete)),
         ],
       ),
     );
@@ -63,9 +78,9 @@ class _NotasListScreenState extends State<NotasListScreen> {
     if (mounted) {
       messenger.showSnackBar(
         SnackBar(
-          content: const Text('Nota eliminada'),
+          content: Text(l10n.noteDeleted),
           action: SnackBarAction(
-            label: 'Deshacer',
+            label: l10n.undo,
             onPressed: () => context.read<NotasProvider>().restaurarUltimaNota(),
           ),
         ),
@@ -74,31 +89,27 @@ class _NotasListScreenState extends State<NotasListScreen> {
   }
 
   Future<void> _toggleArchivar(Nota nota) async {
+    final l10n = AppLocalizations.of(context)!;
     final provider = context.read<NotasProvider>();
     final messenger = ScaffoldMessenger.of(context);
     if (nota.archivada) {
       await provider.desarchivarNota(nota.id);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Nota restaurada')),
-      );
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(l10n.noteRestored)));
     } else {
       await provider.archivarNota(nota.id);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Nota archivada')),
-      );
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(l10n.noteArchived)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<NotasProvider>();
-    final theme = Theme.of(context);
-
     final notas = provider.notas.where((n) => n.archivada == _mostrarArchivadas).toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_mostrarArchivadas ? 'Notas archivadas' : 'Notas'),
+        title: Text(_mostrarArchivadas ? l10n.archivedNotes : l10n.notesTitle),
         actions: [
           IconButton(
             icon: Icon(_mostrarArchivadas ? Icons.unarchive : Icons.archive),
@@ -107,20 +118,17 @@ class _NotasListScreenState extends State<NotasListScreen> {
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.sort),
-            tooltip: 'Ordenar',
+            tooltip: l10n.sortBy,
             onSelected: provider.setSortField,
             itemBuilder: (_) => _sortOptions.map((f) => PopupMenuItem(
               value: f,
-              child: Text(_sortLabels[f]!),
+              child: Text(_sortLabel(f, l10n)),
             )).toList(),
           ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
-              showSearch(
-                context: context,
-                delegate: _NotasSearchDelegate(provider),
-              );
+              showSearch(context: context, delegate: NotasSearchDelegate(provider));
             },
           ),
         ],
@@ -130,44 +138,20 @@ class _NotasListScreenState extends State<NotasListScreen> {
           RefreshIndicator(
             onRefresh: () => provider.cargarNotas(),
             child: provider.cargando
-                ? const Center(child: CircularProgressIndicator())
-                : provider.notas.isEmpty
-                    ? SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.note_alt_outlined, size: 80, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text(
-                              _mostrarArchivadas ? 'Sin notas archivadas' : 'Sin notas',
-                              style: theme.textTheme.titleLarge?.copyWith(color: Colors.grey[600]),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _mostrarArchivadas ? 'Archiva notas para verlas aquí' : 'Toca + para crear una nota',
-                              style: TextStyle(color: Colors.grey[500]),
-                            ),
-                            if (!_mostrarArchivadas) ...[
-                              const SizedBox(height: 24),
-                              FilledButton.icon(
-                                onPressed: () => context.go('/notas/nueva'),
-                                icon: const Icon(Icons.add),
-                                label: const Text('Crear nota'),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    )
+                ? const ShimmerGrid()
+                : notas.isEmpty
+                    ? EmptyState(
+                        icon: Icons.note_alt_outlined,
+                        title: _mostrarArchivadas ? l10n.noArchivedNotes : l10n.noNotes,
+                        subtitle: _mostrarArchivadas ? l10n.archiveHint : l10n.createNoteHint,
+                        actionLabel: _mostrarArchivadas ? null : l10n.createNote,
+                        actionIcon: Icons.add,
+                        onAction: _mostrarArchivadas ? null : () => context.go('/notas/nueva'),
+                      )
                     : LayoutBuilder(
                         builder: (context, constraints) {
-                          final crossAxisCount = constraints.maxWidth > 900
-                              ? 4
-                              : constraints.maxWidth > 600
-                                  ? 3
-                                  : 2;
+                          final crossAxisCount = constraints.maxWidth > 900 ? 4
+                              : constraints.maxWidth > 600 ? 3 : 2;
                           return NotificationListener<ScrollNotification>(
                             onNotification: (notification) {
                               if (notification is ScrollEndNotification &&
@@ -189,11 +173,6 @@ class _NotasListScreenState extends State<NotasListScreen> {
                               itemCount: notas.length,
                               itemBuilder: (context, index) {
                                 final nota = notas[index];
-                                final bgColor = parseColor(nota.color);
-                                final textColor = bgColor.computeLuminance() > 0.5
-                                    ? Colors.black87
-                                    : Colors.white;
-                                final mutedColor = textColor.withAlpha(180);
                                 return Dismissible(
                                   key: ValueKey(nota.id),
                                   direction: DismissDirection.horizontal,
@@ -217,14 +196,15 @@ class _NotasListScreenState extends State<NotasListScreen> {
                                   ),
                                   confirmDismiss: (direction) async {
                                     if (direction == DismissDirection.endToStart) {
+                                      final l10n = AppLocalizations.of(context)!;
                                       final confirm = await showDialog<bool>(
                                         context: context,
                                         builder: (ctx) => AlertDialog(
-                                          title: const Text('Eliminar nota'),
-                                          content: const Text('¿Estás seguro?'),
+                                          title: Text(l10n.deleteNote),
+                                          content: Text(l10n.deleteConfirm),
                                           actions: [
-                                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Eliminar')),
+                                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.cancel)),
+                                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.delete)),
                                           ],
                                         ),
                                       );
@@ -237,109 +217,18 @@ class _NotasListScreenState extends State<NotasListScreen> {
                                     await _toggleArchivar(nota);
                                     return true;
                                   },
-                                  child: Card(
-                                  color: bgColor,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                nota.titulo.isNotEmpty
-                                                    ? nota.titulo
-                                                    : 'Sin titulo',
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 14,
-                                                  color: textColor,
-                                                ),
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            PopupMenuButton<String>(
-                                              padding: EdgeInsets.zero,
-                                              iconSize: 18,
-                                              icon: Icon(Icons.more_vert, color: mutedColor),
-                                              onSelected: (v) {
-                                                switch (v) {
-                                                  case 'editar':
-                                                    context.go('/notas/editar/${nota.id}');
-                                                  case 'archivar':
-                                                    _toggleArchivar(nota);
-                                                  case 'eliminar':
-                                                    _eliminarNota(nota.id);
-                                                }
-                                              },
-                                              itemBuilder: (_) => [
-                                                const PopupMenuItem(
-                                                    value: 'editar',
-                                                    child: Text('Editar')),
-                                                PopupMenuItem(
-                                                  value: 'archivar',
-                                                  child: Text(nota.archivada
-                                                      ? 'Desarchivar'
-                                                      : 'Archivar'),
-                                                ),
-                                                const PopupMenuItem(
-                                                    value: 'eliminar',
-                                                    child: Text('Eliminar')),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Expanded(
-                                          child: GestureDetector(
-                                            onTap: () =>
-                                                context.go('/notas/editar/${nota.id}'),
-                                            child: Text(
-                                              nota.contenido,
-                                              style:
-                                                  TextStyle(fontSize: 12, color: textColor),
-                                              maxLines: 4,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ),
-                                        if (nota.categorias.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 4),
-                                            child: Wrap(
-                                              spacing: 4,
-                                              children: nota.categorias.map((c) =>
-                                                  Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: parseColor(c.color)
-                                                      .withAlpha(80),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child: Text(c.nombre,
-                                                    style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: textColor)),
-                                              )).toList(),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
+                                  child: NotaCard(
+                                    nota: nota,
+                                    onArchivar: () => _toggleArchivar(nota),
+                                    onEliminar: () => _eliminarNota(nota.id),
                                   ),
-                                ),
                                 );
                               },
                             ),
                           );
                         },
                       ),
-                    ),
+          ),
           if (provider.cargandoMas)
             Positioned(
               left: 0,
@@ -356,61 +245,6 @@ class _NotasListScreenState extends State<NotasListScreen> {
         onPressed: () => context.go('/notas/nueva'),
         child: const Icon(Icons.add),
       ),
-    );
-  }
-}
-
-class _NotasSearchDelegate extends SearchDelegate {
-  final NotasProvider provider;
-
-  _NotasSearchDelegate(this.provider);
-
-  @override
-  List<Widget>? buildActions(BuildContext context) {
-    return [
-      IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () => query = '',
-      ),
-    ];
-  }
-
-  @override
-  Widget? buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back),
-      onPressed: () => close(context, null),
-    );
-  }
-
-  @override
-  Widget buildResults(BuildContext context) => _buildList(context);
-
-  @override
-  Widget buildSuggestions(BuildContext context) => _buildList(context);
-
-  Widget _buildList(BuildContext context) {
-    final notas = provider.notas.where((n) =>
-        n.titulo.toLowerCase().contains(query.toLowerCase()) ||
-        n.contenido.toLowerCase().contains(query.toLowerCase())).toList();
-
-    if (notas.isEmpty) {
-      return Center(child: Text('Sin resultados para "$query"'));
-    }
-
-    return ListView.builder(
-      itemCount: notas.length,
-      itemBuilder: (context, index) {
-        final nota = notas[index];
-        return ListTile(
-          title: Text(nota.titulo.isNotEmpty ? nota.titulo : 'Sin título'),
-          subtitle: Text(nota.contenido, maxLines: 2, overflow: TextOverflow.ellipsis),
-          onTap: () {
-            close(context, null);
-            context.go('/notas/editar/${nota.id}');
-          },
-        );
-      },
     );
   }
 }

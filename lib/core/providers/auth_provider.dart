@@ -22,6 +22,7 @@ class AuthProvider extends ChangeNotifier {
   bool get cargando => _cargando;
   String? get error => _error;
   bool get estaLogueado => _user != null;
+  String get displayName => _user?.userMetadata?['display_name'] as String? ?? '';
 
   @override
   void dispose() {
@@ -81,6 +82,72 @@ class AuthProvider extends ChangeNotifier {
       await _supabase.auth.signOut();
     } catch (e) {
       _error = 'Error al cerrar sesión';
+      notifyListeners();
+    }
+  }
+
+  Future<String?> cambiarNombre(String nombre) async {
+    _cargando = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _supabase.auth.updateUser(UserAttributes(
+        data: {'display_name': nombre},
+      ));
+      return null;
+    } on AuthException catch (e) {
+      _error = e.message;
+      return e.message;
+    } catch (e) {
+      _error = 'Error al actualizar nombre';
+      return 'Error al actualizar nombre';
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> cambiarEmail(String email) async {
+    _cargando = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _supabase.auth.updateUser(UserAttributes(
+        email: email,
+      ));
+      return null;
+    } on AuthException catch (e) {
+      _error = e.message;
+      return e.message;
+    } catch (e) {
+      _error = 'Error al actualizar email';
+      return 'Error al actualizar email';
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> cambiarPassword(String nuevaPassword) async {
+    _cargando = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      await _supabase.auth.updateUser(UserAttributes(
+        password: nuevaPassword,
+      ));
+      return null;
+    } on AuthException catch (e) {
+      _error = e.message;
+      return e.message;
+    } catch (e) {
+      _error = 'Error al actualizar contraseña';
+      return 'Error al actualizar contraseña';
+    } finally {
+      _cargando = false;
       notifyListeners();
     }
   }

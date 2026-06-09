@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../../data/database_service.dart';
 import '../../data/supabase_database_service.dart';
+import '../../models/enums.dart';
 import '../../models/recordatorio.dart';
 import '../services/notificacion_service.dart';
 
@@ -159,11 +160,33 @@ class RecordatoriosProvider extends ChangeNotifier {
     try {
       await _db.completarRecordatorio(id);
       await _notificacionService.cancelarRecordatorio(id);
+
+      _programarSiguienteOcurrencia(id);
+
       await cargarRecordatorios();
     } catch (e) {
       _error = 'Error al completar recordatorio';
       notifyListeners();
     }
+  }
+
+  void _programarSiguienteOcurrencia(String id) {
+    final recordatorio = _recordatorios.where((r) => r.id == id).firstOrNull;
+    if (recordatorio == null || recordatorio.recurrencia == Recurrencia.none) return;
+
+    final siguiente = recordatorio.recurrencia.nextDate(recordatorio.fechaHora);
+    if (recordatorio.recurrenciaFin != null && siguiente.isAfter(recordatorio.recurrenciaFin!)) return;
+
+    crearRecordatorio(Recordatorio(
+      id: '',
+      userId: _db.userId,
+      titulo: recordatorio.titulo,
+      descripcion: recordatorio.descripcion,
+      fechaHora: siguiente,
+      recurrencia: recordatorio.recurrencia,
+      recurrenciaFin: recordatorio.recurrenciaFin,
+      createdAt: DateTime.now(),
+    ));
   }
 
   Future<void> eliminarRecordatorio(String id) async {

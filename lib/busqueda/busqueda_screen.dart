@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../core/providers/notas_provider.dart';
 import '../core/providers/tareas_provider.dart';
 import '../models/nota.dart';
 import '../models/tarea.dart';
+import '../l10n/app_localizations.dart';
 
 class BusquedaScreen extends StatefulWidget {
   const BusquedaScreen({super.key});
@@ -34,6 +36,7 @@ class _BusquedaScreenState extends State<BusquedaScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final notasProvider = context.watch<NotasProvider>();
     final tareasProvider = context.watch<TareasProvider>();
     final query = _query;
@@ -59,8 +62,8 @@ class _BusquedaScreenState extends State<BusquedaScreen> {
         title: TextField(
           controller: _searchController,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Buscar notas y tareas...',
+          decoration: InputDecoration(
+            hintText: l10n.searchHint,
             border: InputBorder.none,
             filled: false,
           ),
@@ -85,19 +88,20 @@ class _BusquedaScreenState extends State<BusquedaScreen> {
                 children: [
                   Icon(Icons.search, size: 80, color: Colors.grey[400]),
                   const SizedBox(height: 16),
-                  Text('Busca en tus notas y tareas',
+                  Text(l10n.searchTitle,
                       style: TextStyle(color: Colors.grey[600])),
                   const SizedBox(height: 8),
-                  Text('Escribe arriba para empezar',
+                  Text(l10n.searchSubtitle,
                       style: TextStyle(color: Colors.grey[500], fontSize: 13)),
                 ],
               ),
             )
           : ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.all(12),
               children: [
                 if (notasFiltradas.isNotEmpty) ...[
-                  Text('Notas',
+                  Text(l10n.notesTitle,
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
@@ -105,18 +109,16 @@ class _BusquedaScreenState extends State<BusquedaScreen> {
                   const SizedBox(height: 4),
                   ...notasFiltradas.map((n) => ListTile(
                         leading: const Icon(Icons.note_alt),
-                        title: Text(
-                            n.titulo.isNotEmpty ? n.titulo : 'Sin título'),
+                        title: Text(n.titulo.isNotEmpty ? n.titulo : l10n.noTitle),
                         subtitle: Text(n.contenido,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis),
-                        onTap: () => Navigator.pushNamed(
-                            context, '/notas/editar/${n.id}'),
+                        onTap: () => context.go('/notas/editar/${n.id}'),
                       )),
                   const SizedBox(height: 16),
                 ],
                 if (tareasFiltradas.isNotEmpty) ...[
-                  Text('Tareas',
+                  Text(l10n.tasksTitle,
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
@@ -134,15 +136,14 @@ class _BusquedaScreenState extends State<BusquedaScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis)
                             : null,
-                        onTap: () => Navigator.pushNamed(
-                            context, '/tareas/editar/${t.id}'),
+                        onTap: () => context.go('/tareas/editar/${t.id}'),
                       )),
                 ],
                 if (notasFiltradas.isEmpty && tareasFiltradas.isEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 40),
                     child: Center(
-                      child: Text('Sin resultados para "$query"',
+                      child: Text(l10n.searchNoResults,
                           style: TextStyle(color: Colors.grey[600])),
                     ),
                   ),

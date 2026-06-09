@@ -5,34 +5,45 @@ Personal productivity app: Notes, Tasks, and Reminders with Supabase backend. Bu
 
 ## Tech Stack
 - **Flutter** (stable)
-- **Supabase** (auth, database, RLS)
+- **Supabase** (auth, database, RLS, realtime)
 - **go_router** (declarative routing + auth guards)
 - **provider** (state management)
 - **flutter_local_notifications** (push notifications)
 - **flutter_dotenv** (secrets)
+- **flutter_localizations** + **intl** (l10n Spanish + English)
+- **sqflite** (offline cache)
+- **connectivity_plus** (network detection)
+- **mocktail** (unit testing)
 
 ## Architecture
 ```
 lib/
-  main.dart                 -- Composition root (providers, supabase init)
-  app.dart                  -- GoRouter + ShellRoute + NavigationBar
+  main.dart                 -- Composition root (providers, supabase init, offline cache)
+  app.dart                  -- GoRouter + ShellRoute + NavigationBar + l10n
+  l10n/                     -- ARB files + generated AppLocalizations
   auth/                     -- Login/Register screen
   dashboard/                -- Home/resumen screen
   notas/                    -- Notes CRUD (list + form)
   tareas/                   -- Tasks CRUD (list + form + checklist)
   recordatorios/            -- Reminders CRUD
   busqueda/                 -- Global search (notes + tasks)
-  configuracion/            -- Settings/Profile/Logout
+  configuracion/            -- Settings/Profile/Logout/Dark mode + profile editing
   core/
-    providers/              -- ChangeNotifier providers (auth, notas, tareas, recordatorios)
+    providers/              -- ChangeNotifier providers (auth, notas, tareas, recordatorios, theme)
     services/               -- NotificacionService (local notifications)
     supabase/               -- Supabase config & client init
     theme/                  -- AppTheme (colors + ThemeData)
+  data/
+    database_service.dart   -- Abstract interface for DI/testing
+    supabase_database_service.dart -- Supabase REST implementation
+    cache/
+      local_database.dart   -- SQLite cache tables
+      cached_database_service.dart -- Offline-first wrapper
   models/                   -- Nota, Tarea, Recordatorio, Categoria, ChecklistItem, enums
-  widgets/                  -- EMPTY (shared widgets TBD)
+  widgets/                  -- DashboardCard, CategoriaFilterChips, parseColor
 ```
 
-Pattern: Screen → Provider (state + data access) → Supabase REST API. No repository/domain layer.
+Pattern: Screen → Provider (state + data access) → CachedDatabaseService | SupabaseDatabaseService → Supabase REST API
 
 ## Implemented Features
 - [x] Auth: email/password login, register, logout, session persistence
@@ -51,50 +62,43 @@ Pattern: Screen → Provider (state + data access) → Supabase REST API. No rep
 - [x] Task filter "Programadas": filter to show only scheduled (non-completed tasks with due dates)
 - [x] Note dark mode text contrast: auto dark/light text based on note color luminance
 - [x] Supabase RLS + indexes
+- [x] Error handling: try-catch on all DB calls
+- [x] Repository layer: DatabaseService abstract interface + SupabaseDatabaseService impl
+- [x] Tests: 34 unit tests covering all 4 providers (auth: 17, notas: 7, tareas: 5, recordatorios: 5)
+- [x] Checklist edit bug: fixed (preserves completion state & IDs)
+- [x] Dispose Supabase auth listener: properly cancelled
+- [x] Delete UI + Archive UI + Reminder edit + User feedback (SnackBars)
+- [x] Navigation fix: uses `context.go` instead of `findAncestorStateOfType`
+- [x] Dark theme: persisted via shared_preferences + toggle in settings
+- [x] Debounced search: 300ms Timer in global search
+- [x] Shared widgets: DashboardCard, CategoriaFilterChips, parseColor
+- [x] Per-operation loading states: _cargandoLista, _guardando, _eliminando, _cargandoMas
+- [x] Pagination: 20-item pages with scroll-to-load
+- [x] Sorting: by updated_at, created_at, titulo, prioridad
+- [x] Categoria copyWith: added
+- [x] Full localization: Spanish + English via ARB files + flutter gen-l10n
+- [x] Profile editing: change name, email, password from Settings
+- [x] Offline support: SQLite cache via CachedDatabaseService + connectivity_plus
+- [x] CI/CD: GitHub Actions (flutter analyze + flutter test)
+- [x] CHANGELOG.md + LICENSE (MIT)
 
-## Missing / To Do
-
-### Critical
-- [x] **Error handling**: Providers lack try-catch on DB calls → crash on network error
-- [x] **Tests**: 19 unit tests covering all 4 providers (notas, tareas, recordatorios, auth). Uses `MockDatabaseService` + mocktail. 0 widget tests (require Supabase init)
-- [x] **Repository layer**: Providers mix state + data access → Added `DatabaseService` abstract interface + `SupabaseDatabaseService` impl. Providers accept optional `DatabaseService` for DI/testing
-- [x] **Checklist edit bug**: On task update, all checklist items are deleted/re-inserted losing completion state & IDs
-- [x] **Dispose Supabase auth listener**: `onAuthStateChange.listen()` never cancelled (memory leak)
-
-### High Priority
-- [x] **Delete UI**: Added delete button in note/task cards via PopupMenuButton
-- [x] **Archive UI**: Added archive/unarchive toggle in notes AppBar + PopupMenu
-- [x] **Reminder edit**: Added edit functionality via dialog
-- [x] **Navigation fix**: Dashboard uses fragile `findAncestorStateOfType` instead of `context.go`
-- [x] **User feedback**: Added SnackBars on delete, archive, complete operations
-- [ ] **Offline support**: No caching — all data requires network
-
-### Medium Priority
-- [x] **Dark theme**: Only lightTheme defined → Added darkTheme + ThemeProvider with shared_preferences persistence + toggle in settings
-- [x] **Debounced search**: Fires on every keystroke → Added 300ms Timer debounce in global search
-- [x] **Shared widgets**: `widgets/` empty → Extracted `DashboardCard`, `AccionRapida`, `CategoriaFilterChips`, `parseColor()`
-- [x] **Per-operation loading states**: Single `_cargando` bool is too coarse → Split into `_cargandoLista`, `_guardando`, `_eliminando`, `_cargandoMas` per provider
-- [x] **Pagination**: All data loaded at once → Added 20-item page pagination via `.range()` in all providers + scroll-to-load in screens
-- [x] **Sorting options**: Notes/tasks sorted only by `updated_at DESC` → Added sort PopupMenuButton (updated_at, created_at, titulo, prioridad)
-- [x] **Categoria copyWith**: Missing → Added `copyWith()` method
-- [ ] **Localization**: All strings hardcoded in Spanish, no .arb files
-- [ ] **README**: Still contains default Flutter template text
-
-### Low Priority
-- [ ] **CI/CD**: No GitHub Actions or pipeline
-- [ ] **Image attachments**: Supabase Storage available but unused
-- [ ] **Rich text editing**: Plain TextField, no markdown/flutter_quill
-- [ ] **User profile editing**: No change email/password/display name
-- [ ] **App icon / splash screen**: Defaults
+### Missing / To Do
+- [ ] Widget/integration tests (require Flutter rendering)
+- [ ] Rich text editing (flutter_quill)
+- [ ] Image attachments (Supabase Storage)
+- [ ] Custom app icon / splash screen
+- [ ] User profile editing: email confirmation flow
+- [ ] More granular offline sync (write queue for offline mutations)
 
 ## Commands
 ```bash
 flutter run              # Run app
-flutter analyze          # Lint check (flutter_lints)
-flutter test             # Run tests
+flutter analyze          # Lint check (0 issues)
+flutter test             # Run tests (34 unit tests)
+flutter gen-l10n         # Regenerate localization files
 flutter build apk        # Build Android
 ```
 
 ## SQL Migrations
-Located in `supabase/migrations/20250608_initial_schema.sql`.
-Covers: notas, categorias, nota_categorias, tareas, checklist_items, tarea_categorias, recordatorios + RLS policies + indexes.
+Located in `supabase/migrations/20250608_initial_schema.sql` + `20250609_enable_realtime.sql`.
+Covers: notas, categorias, nota_categorias, tareas, checklist_items, tarea_categorias, recordatorios + RLS policies + indexes + realtime.

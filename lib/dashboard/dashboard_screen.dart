@@ -6,12 +6,14 @@ import '../core/providers/notas_provider.dart';
 import '../core/providers/tareas_provider.dart';
 import '../core/providers/recordatorios_provider.dart';
 import '../widgets/dashboard_card.dart';
+import '../l10n/app_localizations.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final notasProvider = context.watch<NotasProvider>();
     final tareasProvider = context.watch<TareasProvider>();
     final recordatoriosProvider = context.watch<RecordatoriosProvider>();
@@ -40,7 +42,7 @@ class DashboardScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Resumen del día', style: theme.textTheme.headlineSmall?.copyWith(
+          Text(l10n.dashboardTitle, style: theme.textTheme.headlineSmall?.copyWith(
             fontWeight: FontWeight.bold,
           )),
           const SizedBox(height: 16),
@@ -49,7 +51,7 @@ class DashboardScreen extends StatelessWidget {
             DashboardCard(
               icon: Icons.notifications_active,
               color: Colors.orange,
-              title: 'Próximo recordatorio',
+              title: l10n.nextReminder,
               subtitle:
                   '${proximoRecordatorio.titulo} - ${DateFormat('HH:mm').format(proximoRecordatorio.fechaHora)}',
               onTap: () => context.go('/recordatorios'),
@@ -59,16 +61,16 @@ class DashboardScreen extends StatelessWidget {
             DashboardCard(
               icon: Icons.today,
               color: Colors.blue,
-              title: 'Tareas para hoy',
-              subtitle: '${tareasHoy.length} tarea${tareasHoy.length > 1 ? 's' : ''} pendiente${tareasHoy.length > 1 ? 's' : ''}',
+              title: l10n.tasksToday,
+              subtitle: l10n.taskCount(tareasHoy.length),
               onTap: () => context.go('/tareas'),
             ),
 
           DashboardCard(
             icon: Icons.note_alt,
             color: Colors.indigo,
-            title: 'Notas recientes',
-            subtitle: '${notasProvider.notas.length} nota${notasProvider.notas.length != 1 ? 's' : ''} • ${notasRecientes.isNotEmpty ? notasRecientes.first.titulo : 'Ninguna'}',
+            title: l10n.recentNotes,
+            subtitle: '${l10n.noteCount(notasProvider.notas.length)} • ${notasRecientes.isNotEmpty ? notasRecientes.first.titulo : l10n.noNotes}',
             onTap: () => context.go('/notas'),
           ),
 
@@ -76,13 +78,13 @@ class DashboardScreen extends StatelessWidget {
             DashboardCard(
               icon: Icons.date_range,
               color: Colors.teal,
-              title: 'Tareas programadas',
-              subtitle: '${tareasProvider.tareas.where((t) => !t.completada && t.fechaVencimiento != null).length} tarea(s) con fecha asignada',
+              title: l10n.scheduledTasks,
+              subtitle: l10n.taskCount(tareasProvider.tareas.where((t) => !t.completada && t.fechaVencimiento != null).length),
               onTap: () => context.go('/tareas'),
             ),
 
           const SizedBox(height: 24),
-          Text('Acceso rápido', style: theme.textTheme.titleMedium?.copyWith(
+          Text(l10n.quickActions, style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           )),
           const SizedBox(height: 12),
@@ -92,25 +94,25 @@ class DashboardScreen extends StatelessWidget {
             children: [
               AccionRapida(
                 icon: Icons.lightbulb_outline,
-                label: 'Nota rápida',
+                label: l10n.quickNote,
                 color: Colors.amber,
                 onTap: () => context.go('/notas/nueva'),
               ),
               AccionRapida(
                 icon: Icons.checklist,
-                label: 'Nueva tarea',
+                label: l10n.newTask,
                 color: Colors.green,
                 onTap: () => context.go('/tareas/nueva'),
               ),
               AccionRapida(
                 icon: Icons.alarm,
-                label: 'Recordatorio',
+                label: l10n.reminder,
                 color: Colors.orange,
                 onTap: () => context.go('/recordatorios'),
               ),
               AccionRapida(
                 icon: Icons.search,
-                label: 'Buscar',
+                label: l10n.search,
                 color: Colors.purple,
                 onTap: () => context.go('/busqueda'),
               ),

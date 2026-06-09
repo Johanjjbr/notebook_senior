@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/theme/app_theme.dart';
+import 'l10n/app_localizations.dart';
 import 'auth/login_screen.dart';
 import 'dashboard/dashboard_screen.dart';
 import 'notas/notas_list_screen.dart';
@@ -103,6 +105,17 @@ class NotebookSeniorApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es'),
+        Locale('en'),
+      ],
+      locale: const Locale('es'),
     );
   }
 }
@@ -122,6 +135,7 @@ class _MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final location = GoRouterState.of(context).matchedLocation;
     final selectedIndex = _indiceActual(location);
 
@@ -148,31 +162,31 @@ class _MainShell extends StatelessWidget {
               break;
           }
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
-            label: 'Inicio',
+            label: l10n.dashboardTitle,
           ),
           NavigationDestination(
             icon: Icon(Icons.note_alt_outlined),
             selectedIcon: Icon(Icons.note_alt),
-            label: 'Notas',
+            label: l10n.notesTitle,
           ),
           NavigationDestination(
             icon: Icon(Icons.checklist_outlined),
             selectedIcon: Icon(Icons.checklist),
-            label: 'Tareas',
+            label: l10n.tasksTitle,
           ),
           NavigationDestination(
             icon: Icon(Icons.alarm_outlined),
             selectedIcon: Icon(Icons.alarm),
-            label: 'Recordatorios',
+            label: l10n.remindersTitle,
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
-            label: 'Ajustes',
+            label: l10n.settingsTitle,
           ),
         ],
       ),

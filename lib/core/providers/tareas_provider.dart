@@ -229,6 +229,7 @@ class TareasProvider extends ChangeNotifier {
       if (tarea.fechaVencimiento != null) {
         await _notificacionService.programarTarea(
           tareaId, tarea.titulo, tarea.fechaVencimiento!,
+          descripcion: tarea.descripcion,
         );
       }
 
@@ -286,6 +287,7 @@ class TareasProvider extends ChangeNotifier {
       if (tarea.fechaVencimiento != null && !tarea.completada) {
         await _notificacionService.programarTarea(
           tarea.id, tarea.titulo, tarea.fechaVencimiento!,
+          descripcion: tarea.descripcion,
         );
       }
 
@@ -306,12 +308,39 @@ class TareasProvider extends ChangeNotifier {
 
       if (completada) {
         await _notificacionService.cancelarTarea(id);
+        _programarSiguienteOcurrencia(id);
       }
 
       await cargarTareas();
     } catch (e) {
       _error = 'Error al actualizar tarea';
       notifyListeners();
+    }
+  }
+
+  Future<void> _programarSiguienteOcurrencia(String id) async {
+    final tarea = _tareas.where((t) => t.id == id).firstOrNull;
+    if (tarea == null || tarea.recurrencia == Recurrencia.none) return;
+
+    final siguiente = tarea.recurrencia.nextDate(tarea.fechaVencimiento ?? DateTime.now());
+    if (tarea.recurrenciaFin != null && siguiente.isAfter(tarea.recurrenciaFin!)) return;
+
+    final nuevaId = _uuid.v4();
+    final nueva = tarea.copyWith(
+      id: nuevaId,
+      completada: false,
+      fechaVencimiento: siguiente,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+
+    try {
+      await _db.crearTarea(nueva);
+      await _notificacionService.programarTarea(nuevaId, nueva.titulo, siguiente,
+        descripcion: nueva.descripcion,
+      );
+    } catch (e) {
+      // Silencio
     }
   }
 
@@ -376,6 +405,7 @@ class TareasProvider extends ChangeNotifier {
       if (tarea.fechaVencimiento != null) {
         await _notificacionService.programarTarea(
           tarea.id, tarea.titulo, tarea.fechaVencimiento!,
+          descripcion: tarea.descripcion,
         );
       }
       await cargarTareas();
@@ -397,6 +427,7 @@ class TareasProvider extends ChangeNotifier {
             t.fechaVencimiento!.isAfter(now)) {
           await _notificacionService.programarTarea(
             t.id, t.titulo, t.fechaVencimiento!,
+            descripcion: t.descripcion,
           );
         }
       }

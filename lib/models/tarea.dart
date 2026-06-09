@@ -11,6 +11,8 @@ class Tarea {
   final Prioridad prioridad;
   final DateTime? fechaVencimiento;
   final String? notaId;
+  final Recurrencia recurrencia;
+  final DateTime? recurrenciaFin;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ChecklistItem> checklistItems;
@@ -25,6 +27,8 @@ class Tarea {
     this.prioridad = Prioridad.media,
     this.fechaVencimiento,
     this.notaId,
+    this.recurrencia = Recurrencia.none,
+    this.recurrenciaFin,
     required this.createdAt,
     required this.updatedAt,
     this.checklistItems = const [],
@@ -39,6 +43,10 @@ class Tarea {
       descripcion: json['descripcion'] as String? ?? '',
       completada: json['completada'] as bool? ?? false,
       prioridad: Prioridad.fromJson(json['prioridad'] as String? ?? 'media'),
+      recurrencia: Recurrencia.fromJson(json['recurrencia'] as String? ?? 'none'),
+      recurrenciaFin: json['recurrencia_fin'] != null
+          ? DateTime.parse(json['recurrencia_fin'] as String)
+          : null,
       fechaVencimiento: json['fecha_vencimiento'] != null
           ? DateTime.parse(json['fecha_vencimiento'] as String)
           : null,
@@ -67,6 +75,7 @@ class Tarea {
       'prioridad': prioridad.toJson(),
       'fecha_vencimiento': fechaVencimiento?.toIso8601String().split('T').first,
       'nota_id': notaId,
+      'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
   }
@@ -80,6 +89,8 @@ class Tarea {
     Prioridad? prioridad,
     DateTime? fechaVencimiento,
     String? notaId,
+    Recurrencia? recurrencia,
+    DateTime? recurrenciaFin,
     DateTime? createdAt,
     DateTime? updatedAt,
     List<ChecklistItem>? checklistItems,
@@ -94,6 +105,8 @@ class Tarea {
       prioridad: prioridad ?? this.prioridad,
       fechaVencimiento: fechaVencimiento ?? this.fechaVencimiento,
       notaId: notaId ?? this.notaId,
+      recurrencia: recurrencia ?? this.recurrencia,
+      recurrenciaFin: recurrenciaFin ?? this.recurrenciaFin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       checklistItems: checklistItems ?? this.checklistItems,
